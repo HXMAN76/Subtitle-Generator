@@ -1,0 +1,42 @@
+[
+  {
+    "source": "Hello, how are you?",
+    "target": "Hola, ¿cómo estás?"
+  },
+  {
+    "source": "Good morning",
+    "target": "Buenos días"
+  },
+  {
+    "source": "Good afternoon",
+    "target": "Buenas tardes"
+  },
+  {
+    "source": "Good evening",
+    "target": "Buenas noches"
+  },
+  {
+    "source": "Thank you very much",
+    "target": "Muchas gracias"
+  },
+  {
+    "source": "You're welcome",
+    "target": "De nada"
+  },
+  {
+    "source": "Please",
+    "target": "Por favor"
+  },
+  {
+    "source": "Excuse me",
+    "target": "Perdón"
+  },
+  {
+    "source": "I don't understand",
+    "target": "No entiendo"
+  },
+  {
+    "source": "Could you repeat that?",
+    "target": "¿Podrías repetir eso?"
+  }
+]

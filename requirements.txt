@@ -1,0 +1,24 @@
+# Core dependencies
+moviepy>=1.0.3
+openai-whisper>=20230314
+torch>=2.0.0
+torchaudio>=2.0.0
+pydub>=0.25.1
+
+# Silero VAD (loaded from torch.hub)
+# No package needed - loaded via torch.hub.load()
+
+# Audio processing
+ffmpeg-python>=0.2.0
+
+# Optional: For GPU support (uncomment if you have CUDA)
+# torch==2.0.0+cu118
+# torchaudio==2.0.0+cu118
+
+# Development dependencies (optional)
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.0.0
+
+# For building .exe
+# pyinstaller>=5.13.0

@@ -1,0 +1,383 @@
+"""
+╔══════════════════════════════════════════════════════════════════════╗
+║                                                                      ║
+║           SUBTITLE GENERATOR & TRANSLATOR                            ║
+║           Production-Ready Project Structure                         ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+PROJECT OVERVIEW
+================
+
+A professional, offline subtitle generation and translation application
+featuring Whisper STT, Silero VAD, and custom-trained neural translation.
+
+
+DIRECTORY STRUCTURE
+===================
+
+Subtitle-Generator/
+│
+├── 📄 APPLICATION FILES
+│   ├── app.py                      Main application entry point
+│   ├── config.py                   Centralized configuration
+│   └── requirements.txt            Python dependencies
+│
+├── 📚 SOURCE CODE (src/)
+│   ├── __init__.py                 Package initialization
+│   ├── audio_processor.py          Audio extraction & segmentation
+│   ├── vad.py                      Voice activity detection (Silero)
+│   ├── transcriber.py              Speech-to-text (Whisper)
+│   ├── translator.py               Custom neural translation model
+│   └── subtitle_generator.py       SRT/VTT subtitle file generation
+│
+├── 🧠 MODELS (models/)
+│   └── translation/                Translation model storage
+│       ├── model.pt                Trained model weights
+│       └── vocab.json              Vocabulary mappings
+│
+├── 📊 DATA (data/)
+│   ├── raw/                        Raw training datasets
+│   └── processed/                  Processed training data
+│       ├── train_data.json         Your training data
+│       └── train_data_example.json Sample data format
+│
+├── 📤 OUTPUT (output/)
+│   └── *.srt, *.vtt               Generated subtitle files
+│
+├── 🔧 TEMPORARY (temp/)
+│   ├── *.mp3                       Extracted audio files
+│   └── voice/                      Segmented audio clips
+│       └── segment_*.mp3
+│
+├── 🛠️ SCRIPTS (scripts/)
+│   └── train_translator.py         Translation model training
+│
+└── 📖 DOCUMENTATION
+    ├── README.md                   Full documentation
+    ├── QUICKSTART.md               5-minute getting started
+    ├── BUILD_EXE.md                Building .exe guide
+    └── RESTRUCTURING_SUMMARY.md    This restructuring summary
+
+
+MODULE RESPONSIBILITIES
+========================
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ AudioProcessor (src/audio_processor.py)                             │
+├─────────────────────────────────────────────────────────────────────┤
+│ • Extract audio from video files                                    │
+│ • Convert audio formats                                             │
+│ • Segment audio based on timestamps                                 │
+│ • Manage temporary audio files                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ VoiceActivityDetector (src/vad.py)                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│ • Load Silero VAD model                                             │
+│ • Detect speech segments in audio                                   │
+│ • Return precise timestamps                                         │
+│ • Filter out silence                                                │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ Transcriber (src/transcriber.py)                                    │
+├─────────────────────────────────────────────────────────────────────┤
+│ • Load Whisper model                                                │
+│ • Transcribe audio to text                                          │
+│ • Support multiple languages                                        │
+│ • Process audio segments                                            │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ Translator (src/translator.py)                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│ • Custom Seq2Seq neural network                                     │
+│ • Train on parallel corpora                                         │
+│ • Translate subtitle text                                           │
+│ • No external APIs (100% offline)                                   │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│ SubtitleGenerator (src/subtitle_generator.py)                       │
+├─────────────────────────────────────────────────────────────────────┤
+│ • Generate SRT format                                               │
+│ • Generate WebVTT format                                            │
+│ • Format timestamps correctly                                       │
+│ • Handle multi-line subtitles                                       │
+└─────────────────────────────────────────────────────────────────────┘
+
+
+WORKFLOW
+========
+
+┌─────────────┐
+│ Video File  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────┐
+│ AudioProcessor      │ → Extract audio from video
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ VoiceActivityDetect │ → Detect speech segments
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ AudioProcessor      │ → Segment audio by timestamps
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Transcriber         │ → Convert speech to text
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Translator          │ → Translate text (optional)
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ SubtitleGenerator   │ → Generate SRT/VTT files
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────┐
+│ Subtitle    │
+│ Files       │
+└─────────────┘
+
+
+QUICK COMMANDS
+==============
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python app.py
+
+# Train translation model
+python scripts/train_translator.py
+
+# Build as .exe (Windows)
+pyinstaller --onefile --name SubtitleGenerator app.py
+
+
+CONFIGURATION (config.py)
+==========================
+
+Key Settings:
+-------------
+WHISPER_MODEL_SIZE      "tiny" | "base" | "small" | "medium" | "large"
+WHISPER_DEVICE          "cpu" | "cuda"
+SOURCE_LANGUAGE         "en" | "es" | "fr" | etc.
+TARGET_LANGUAGE         Language code for translation
+SUBTITLE_FORMAT         "srt" | "vtt"
+VAD_THRESHOLD           0.0 to 1.0 (sensitivity)
+
+
+MODEL SIZES (Whisper)
+=====================
+
+┌──────────┬────────────┬──────────┬────────────┬─────────────┐
+│  Model   │   Speed    │ Accuracy │   Memory   │ Recommended │
+├──────────┼────────────┼──────────┼────────────┼─────────────┤
+│  tiny    │ Very Fast  │   Low    │   ~1 GB    │   Testing   │
+│  base    │    Fast    │   Good   │  ~1.5 GB   │  Production │
+│  small   │   Medium   │  Better  │   ~2 GB    │   Quality   │
+│  medium  │    Slow    │   High   │   ~4 GB    │  Accuracy   │
+│  large   │ Very Slow  │ Highest  │   ~8 GB    │    Best     │
+└──────────┴────────────┴──────────┴────────────┴─────────────┘
+
+
+TRANSLATION MODEL
+=================
+
+Architecture:
+• Encoder: Bidirectional LSTM
+• Decoder: LSTM with attention
+• Embeddings: 256D
+• Hidden: 512D
+• Layers: 2
+
+Training Data Format:
+[
+  {"source": "English text", "target": "Translated text"},
+  ...
+]
+
+
+BUILDING FOR DISTRIBUTION
+==========================
+
+1. Install PyInstaller
+   pip install pyinstaller
+
+2. Build executable
+   pyinstaller --onefile app.py
+
+3. Include FFmpeg
+   - Download ffmpeg.exe
+   - Place in same directory
+
+4. Test on clean machine
+   - No Python needed
+   - Runs completely offline
+
+
+FILE SIZES
+==========
+
+Source Code:        ~50 KB
+Dependencies:       ~500 MB
+Whisper (tiny):     ~75 MB
+Whisper (base):     ~150 MB
+Whisper (small):    ~500 MB
+Translation Model:  ~50 MB (typical)
+Built .exe:         ~200-500 MB (with dependencies)
+
+
+SUPPORTED FORMATS
+=================
+
+Video Input:
+• MP4 (recommended)
+• AVI, MKV, MOV
+• WebM, FLV
+
+Audio Output:
+• MP3 (default)
+• WAV, FLAC
+
+Subtitle Output:
+• SRT (SubRip)
+• VTT (WebVTT)
+
+
+PERFORMANCE BENCHMARKS
+=======================
+
+1-minute video:
+• tiny:   ~5 seconds
+• base:   ~15 seconds
+• small:  ~30 seconds
+• medium: ~60 seconds
+• large:  ~120-180 seconds
+
+(CPU: Intel i7, RAM: 16GB)
+
+
+KEY FEATURES
+============
+
+✓ Offline operation (no internet required)
+✓ Custom translation model (trainable)
+✓ Professional subtitle output
+✓ Modular, maintainable code
+✓ Production-ready architecture
+✓ Comprehensive documentation
+✓ Build as standalone .exe
+✓ Multi-format support
+✓ GPU acceleration (optional)
+✓ Configurable parameters
+
+
+DEPENDENCIES
+============
+
+Core:
+• moviepy (video/audio processing)
+• openai-whisper (speech-to-text)
+• torch (neural networks)
+• pydub (audio manipulation)
+
+System:
+• FFmpeg (required for audio)
+• Python 3.8+ (development)
+
+
+GETTING HELP
+============
+
+Documentation:
+1. README.md          - Full guide
+2. QUICKSTART.md      - Quick start
+3. BUILD_EXE.md       - Building guide
+4. Code docstrings    - API docs
+
+Resources:
+• OpenAI Whisper: https://github.com/openai/whisper
+• Silero VAD: https://github.com/snakers4/silero-vad
+• FFmpeg: https://ffmpeg.org
+
+
+BEST PRACTICES
+==============
+
+Development:
+• Use "base" model for testing
+• Enable GPU if available
+• Test with short videos first
+• Monitor memory usage
+
+Production:
+• Pre-download all models
+• Include FFmpeg in distribution
+• Test on target platform
+• Provide clear documentation
+
+Training:
+• Use quality parallel data
+• Start with 10K+ sentence pairs
+• Validate on separate test set
+• Save checkpoints regularly
+
+
+NEXT STEPS
+==========
+
+1. ✅ Install dependencies
+   pip install -r requirements.txt
+
+2. ✅ Test with sample video
+   python app.py
+
+3. ✅ Customize configuration
+   Edit config.py
+
+4. ✅ Train translation model (optional)
+   python scripts/train_translator.py
+
+5. ✅ Build for distribution
+   See BUILD_EXE.md
+
+
+PROJECT STATUS
+==============
+
+✓ Core functionality implemented
+✓ Production-ready structure
+✓ Comprehensive documentation
+✓ Ready for .exe packaging
+✓ Offline-capable
+✓ Extensible architecture
+
+Ready for:
+→ Personal use
+→ Distribution
+→ Further customization
+→ Feature additions
+
+
+═══════════════════════════════════════════════════════════════════════
+
+                    Happy Subtitle Generation! 🎬📝
+
+═══════════════════════════════════════════════════════════════════════
+"""

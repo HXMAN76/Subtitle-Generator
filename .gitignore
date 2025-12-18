@@ -1,0 +1,58 @@
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Ignore virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Ignore temporary files
+temp/
+*.mp3
+*.wav
+*.mp4
+*.avi
+*.mkv
+
+# Ignore output files
+output/
+
+# Ignore model files (large)
+models/translation/*.pt
+models/whisper/
+
+# Keep directory structure
+!models/translation/.gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!output/.gitkeep
+!temp/.gitkeep
+
+# Ignore training data (can be large)
+data/raw/*
+!data/raw/.gitkeep
+
+# Ignore IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore distribution files
+dist/
+build/
+*.spec
+*.egg-info/
+
+# Ignore logs
+*.log
