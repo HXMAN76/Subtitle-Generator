@@ -1,195 +1,162 @@
-"""Custom translation model module (from scratch, no built-in APIs)."""
+"""
+Translator Module - NMT Integration.
+
+This module provides the Translator class that wraps the NMT subsystem
+for use in the main application pipeline.
+
+Note: Requires a trained NMT model. Without a trained model,
+translations will not be available.
+"""
+
+import os
+from pathlib import Path
+from typing import Optional
 
 import torch
-import torch.nn as nn
-import json
-from pathlib import Path
-import config
-
-
-class Seq2SeqTranslator(nn.Module):
-    """Sequence-to-sequence translator using encoder-decoder architecture."""
-    
-    def __init__(self, vocab_size: int, embedding_dim: int = 256, 
-                 hidden_dim: int = 512, num_layers: int = 2):
-        """Initialize the translation model.
-        
-        Args:
-            vocab_size: Size of the vocabulary.
-            embedding_dim: Dimension of word embeddings.
-            hidden_dim: Dimension of hidden layers.
-            num_layers: Number of LSTM layers.
-        """
-        super(Seq2SeqTranslator, self).__init__()
-        
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        
-        # Encoder
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.encoder = nn.LSTM(embedding_dim, hidden_dim, num_layers, 
-                               batch_first=True, bidirectional=True)
-        
-        # Decoder
-        self.decoder = nn.LSTM(embedding_dim, hidden_dim * 2, num_layers, 
-                               batch_first=True)
-        self.fc = nn.Linear(hidden_dim * 2, vocab_size)
-        
-    def forward(self, src, tgt):
-        """Forward pass through the model."""
-        # Encoder
-        embedded_src = self.embedding(src)
-        encoder_outputs, (hidden, cell) = self.encoder(embedded_src)
-        
-        # Decoder
-        embedded_tgt = self.embedding(tgt)
-        decoder_outputs, _ = self.decoder(embedded_tgt, (hidden, cell))
-        
-        # Output
-        output = self.fc(decoder_outputs)
-        return output
 
 
 class Translator:
-    """Handles text translation using a custom trained model."""
+    """Translator using Neural Machine Translation.
     
-    def __init__(self, model_path: str = None, vocab_path: str = None):
-        """Initialize the translator.
+    This class provides a simple interface for translation that
+    integrates with the subtitle generation pipeline.
+    
+    Args:
+        model_dir: Directory containing model checkpoint and tokenizer.
+        device: Device for inference ('cuda', 'cpu', or None for auto).
+        beam_size: Beam size for decoding (0 for greedy).
+    """
+    
+    def __init__(
+        self,
+        model_dir: str = "models/translation",
+        device: Optional[str] = None,
+        beam_size: int = 4
+    ):
+        self.model_dir = Path(model_dir)
+        self.beam_size = beam_size
+        self.translator = None
+        self.available = False
         
-        Args:
-            model_path: Path to the trained model file.
-            vocab_path: Path to the vocabulary JSON file.
-        """
-        self.model_path = model_path or str(config.TRANSLATION_MODEL_PATH)
-        self.vocab_path = vocab_path or str(config.TRANSLATION_VOCAB_PATH)
-        
-        self.model = None
-        self.vocab = None
-        self.word_to_idx = {}
-        self.idx_to_word = {}
-        
-        if Path(self.model_path).exists() and Path(self.vocab_path).exists():
-            self.load_model()
+        # Set device
+        if device:
+            self.device = torch.device(device)
         else:
-            print("Warning: Translation model not found. Please train the model first.")
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        # Try to load model
+        self._load_model()
     
-    def load_model(self):
-        """Load the trained model and vocabulary."""
+    def _load_model(self):
+        """Load the NMT model if available."""
+        checkpoint_path = self.model_dir / "best.pt"
+        tokenizer_path = self.model_dir / "nmt_spm.model"
+        
+        if not checkpoint_path.exists():
+            print(f"[Translator] No model checkpoint found at {checkpoint_path}")
+            print("[Translator] Translation will not be available.")
+            print("[Translator] Train a model with: python scripts/train_nmt.py")
+            return
+        
+        if not tokenizer_path.exists():
+            print(f"[Translator] No tokenizer found at {tokenizer_path}")
+            return
+        
         try:
-            # Load vocabulary
-            with open(self.vocab_path, 'r', encoding='utf-8') as f:
-                vocab_data = json.load(f)
-                self.word_to_idx = vocab_data['word_to_idx']
-                self.idx_to_word = vocab_data['idx_to_word']
+            from src.nmt.inference import NMTTranslator
+            from src.nmt.tokenizer import Tokenizer
+            from src.nmt.model.transformer import Transformer
             
-            # Load model
-            checkpoint = torch.load(self.model_path, map_location='cpu')
-            vocab_size = len(self.word_to_idx)
-            
-            self.model = Seq2SeqTranslator(
-                vocab_size=vocab_size,
-                embedding_dim=checkpoint.get('embedding_dim', 256),
-                hidden_dim=checkpoint.get('hidden_dim', 512),
-                num_layers=checkpoint.get('num_layers', 2)
+            # Load tokenizer
+            tokenizer = Tokenizer(
+                model_path=str(tokenizer_path),
+                language_tags=["<en>", "<hi>"]
             )
             
-            self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.model.eval()
+            # Load model
+            checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
-            print("Translation model loaded successfully.")
+            config = checkpoint.get('config', {})
+            config['vocab_size'] = tokenizer.vocab_size
+            
+            model = Transformer.from_config(config)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.to(self.device)
+            model.eval()
+            
+            # Create translator
+            self.translator = NMTTranslator(
+                model=model,
+                tokenizer=tokenizer,
+                device=self.device,
+                beam_size=self.beam_size
+            )
+            
+            self.available = True
+            print(f"[Translator] Model loaded successfully ({model.count_parameters_readable()} params)")
+            
         except Exception as e:
-            print(f"Failed to load translation model: {e}")
-            self.model = None
+            print(f"[Translator] Failed to load model: {e}")
+            self.available = False
     
-    def tokenize(self, text: str) -> list:
-        """Convert text to token indices.
-        
-        Args:
-            text: Input text to tokenize.
-            
-        Returns:
-            List of token indices.
-        """
-        words = text.lower().split()
-        return [self.word_to_idx.get(word, self.word_to_idx.get('<unk>', 0)) 
-                for word in words]
-    
-    def detokenize(self, indices: list) -> str:
-        """Convert token indices back to text.
-        
-        Args:
-            indices: List of token indices.
-            
-        Returns:
-            Decoded text string.
-        """
-        words = [self.idx_to_word.get(str(idx), '<unk>') for idx in indices]
-        return ' '.join(words)
-    
-    def translate(self, text: str, source_lang: str = None, 
-                  target_lang: str = None) -> str:
-        """Translate text from source language to target language.
+    def translate(
+        self,
+        text: str,
+        source_lang: str = "en",
+        target_lang: str = "hi"
+    ) -> str:
+        """Translate text.
         
         Args:
             text: Text to translate.
             source_lang: Source language code.
             target_lang: Target language code.
-            
+        
         Returns:
-            Translated text string.
+            Translated text, or original text if translation unavailable.
         """
-        if self.model is None:
-            # Fallback: return original text if model not loaded
-            print("Warning: Translation model not loaded. Returning original text.")
+        if not self.available or self.translator is None:
             return text
         
         try:
-            # Tokenize input
-            src_tokens = self.tokenize(text)
-            src_tensor = torch.tensor([src_tokens], dtype=torch.long)
-            
-            # Generate translation (simple greedy decoding)
-            with torch.no_grad():
-                # Start with <sos> token
-                tgt_tokens = [self.word_to_idx.get('<sos>', 1)]
-                max_length = 100
-                
-                for _ in range(max_length):
-                    tgt_tensor = torch.tensor([tgt_tokens], dtype=torch.long)
-                    output = self.model(src_tensor, tgt_tensor)
-                    
-                    # Get the last predicted token
-                    next_token = output[0, -1].argmax().item()
-                    tgt_tokens.append(next_token)
-                    
-                    # Stop if <eos> token is generated
-                    if next_token == self.word_to_idx.get('<eos>', 2):
-                        break
-                
-                # Detokenize
-                translated_text = self.detokenize(tgt_tokens[1:-1])  # Remove <sos> and <eos>
-                return translated_text
-        
+            return self.translator.translate(
+                text,
+                source_lang=f"<{source_lang}>",
+                target_lang=f"<{target_lang}>"
+            )
         except Exception as e:
-            print(f"Translation failed: {e}")
+            print(f"[Translator] Translation error: {e}")
             return text
     
-    def translate_subtitles(self, subtitles: list) -> list:
-        """Translate a list of subtitle entries.
+    def translate_batch(
+        self,
+        texts: list,
+        source_lang: str = "en",
+        target_lang: str = "hi"
+    ) -> list:
+        """Translate a batch of texts.
         
         Args:
-            subtitles: List of subtitle dictionaries with 'text' key.
-            
+            texts: List of texts to translate.
+            source_lang: Source language code.
+            target_lang: Target language code.
+        
         Returns:
-            List of subtitle dictionaries with translated text.
+            List of translated texts.
         """
-        translated = []
+        if not self.available or self.translator is None:
+            return texts
         
-        for subtitle in subtitles:
-            translated_subtitle = subtitle.copy()
-            translated_subtitle['text'] = self.translate(subtitle['text'])
-            translated_subtitle['original_text'] = subtitle['text']
-            translated.append(translated_subtitle)
-        
-        return translated
+        try:
+            return self.translator.translate_batch(
+                texts,
+                source_lang=f"<{source_lang}>",
+                target_lang=f"<{target_lang}>"
+            )
+        except Exception as e:
+            print(f"[Translator] Batch translation error: {e}")
+            return texts
+    
+    def is_available(self) -> bool:
+        """Check if translation is available."""
+        return self.available

@@ -1,58 +1,130 @@
-# Ignore Python cache
+# ============================================
+# Python
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.manifest
+*.spec
 
-# Ignore virtual environments
+# ============================================
+# Virtual Environments
+# ============================================
+.venv/
 venv/
 env/
 ENV/
-.venv
+env.bak/
+venv.bak/
 
-# Ignore temporary files
-temp/
-*.mp3
-*.wav
+# ============================================
+# Media Files (Large)
+# ============================================
 *.mp4
 *.avi
 *.mkv
+*.mov
+*.webm
+*.flv
+*.mp3
+*.wav
+*.flac
+*.ogg
 
-# Ignore output files
+# ============================================
+# Temporary Files
+# ============================================
+temp/
+*.tmp
+*.temp
+*.cache
+
+# ============================================
+# Output Files
+# ============================================
 output/
+*.srt
+*.vtt
 
-# Ignore model files (large)
+# ============================================
+# Model Files (Large)
+# ============================================
 models/translation/*.pt
+models/translation/*.pth
 models/whisper/
-
-# Keep directory structure
 !models/translation/.gitkeep
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!output/.gitkeep
-!temp/.gitkeep
 
-# Ignore training data (can be large)
+# ============================================
+# Training Data (Can be large)
+# ============================================
 data/raw/*
 !data/raw/.gitkeep
 
-# Ignore IDE settings
+# ============================================
+# IDE / Editor
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
 
-# Ignore OS files
+# ============================================
+# OS Generated
+# ============================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Ignore distribution files
-dist/
-build/
-*.spec
-*.egg-info/
+# ============================================
+# Testing
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
-# Ignore logs
+# ============================================
+# Logs
+# ============================================
 *.log
+logs/
+
+# ============================================
+# Keep Directory Structure
+# ============================================
+!models/translation/.gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!output/.gitkeep
+!temp/.gitkeep
+!examples/.gitkeep
+!tests/

@@ -113,8 +113,8 @@ def main():
     # Initialize application
     app = SubtitleApp()
     
-    # Example usage
-    video_path = "./The_Boys_-_Final_Season_Teaser_Trailer_Prime_Video_1080p.mp4"
+    # Example usage - update this path to your video file
+    video_path = "./examples/sample_video.mp4"
     
     if not Path(video_path).exists():
         print(f"\nError: Video file not found: {video_path}")

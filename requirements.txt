@@ -3,13 +3,26 @@ moviepy>=1.0.3
 openai-whisper>=20230314
 torch>=2.0.0
 torchaudio>=2.0.0
+torchvision 
+tqdm
 pydub>=0.25.1
+
+# NMT dependencies
+sentencepiece>=0.1.99
+sacrebleu>=2.3.0
+nltk>=3.8.0
+
+# Audio processing
+ffmpeg-python>=0.2.0
 
 # Silero VAD (loaded from torch.hub)
 # No package needed - loaded via torch.hub.load()
 
-# Audio processing
-ffmpeg-python>=0.2.0
+# For accessing HF datasets/models (optional, for data download)
+# datasets
+
+# Evaluation metrics (optional)
+# unbabel-comet>=2.0.0  # For COMET score (requires GPU for best performance)
 
 # Optional: For GPU support (uncomment if you have CUDA)
 # torch==2.0.0+cu118
