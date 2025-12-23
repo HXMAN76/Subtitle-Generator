@@ -39,13 +39,15 @@ def download_en_hi_dataset():
             "target": item["translation"]["hi"]
         })
 
-    output_path = config.DATA_DIR / "processed" / "train_data.json"
+    # Save as JSONL (one JSON object per line) for memory-efficient streaming
+    output_path = config.DATA_DIR / "processed" / "train_data.jsonl"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(train_data, f, ensure_ascii=False, indent=2)
+        for item in train_data:
+            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-    print(f"Saved ALL {len(train_data)} samples to {output_path}")
+    print(f"Saved ALL {len(train_data)} samples to {output_path} (JSONL format)")
 
 
 def download_opus_dataset(src_lang: str = "en", tgt_lang: str = "es"):
@@ -75,16 +77,18 @@ def download_opus_dataset(src_lang: str = "en", tgt_lang: str = "es"):
                 "target": item["translation"][tgt_lang]
             })
 
+        # Save as JSONL (one JSON object per line) for memory-efficient streaming
         output_path = (
             config.DATA_DIR / "processed" /
-            f"train_data_{src_lang}_{tgt_lang}.json"
+            f"train_data_{src_lang}_{tgt_lang}.jsonl"
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(train_data, f, ensure_ascii=False, indent=2)
+            for item in train_data:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
-        print(f"Saved ALL {len(train_data)} samples to {output_path}")
+        print(f"Saved ALL {len(train_data)} samples to {output_path} (JSONL format)")
 
     except Exception as e:
         print(f"Error downloading dataset: {e}")

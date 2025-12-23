@@ -13,7 +13,7 @@ import random
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 import torch
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import Dataset, DataLoader, Sampler, IterableDataset
 
 
 class TranslationDataset(Dataset):
@@ -114,7 +114,7 @@ class TranslationDataset(Dataset):
         }
 
 
-class TranslationDatasetStreaming:
+class TranslationDatasetStreaming(IterableDataset):
     """Streaming dataset for very large files.
     
     Loads data lazily to handle files that don't fit in memory.
@@ -340,3 +340,32 @@ def create_dataloader(
             num_workers=num_workers,
             pin_memory=True
         )
+
+
+def create_streaming_dataloader(
+    dataset: TranslationDatasetStreaming,
+    batch_size: int,
+    num_workers: int = 0,
+    pad_id: int = 0
+) -> DataLoader:
+    """Create DataLoader for streaming translation dataset.
+    
+    Args:
+        dataset: TranslationDatasetStreaming instance.
+        batch_size: Batch size.
+        num_workers: Number of workers (0 recommended for streaming).
+        pad_id: Padding token ID.
+    
+    Returns:
+        DataLoader instance.
+    """
+    def collate_wrapper(batch):
+        return collate_fn(batch, pad_id=pad_id)
+    
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        collate_fn=collate_wrapper,
+        num_workers=num_workers,
+        pin_memory=True
+    )

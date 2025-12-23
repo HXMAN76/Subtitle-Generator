@@ -23,7 +23,12 @@ import torch
 from src.nmt.config import NMTConfig, get_base_config, get_small_config, get_debug_config
 from src.nmt.tokenizer import Tokenizer, train_nmt_tokenizer
 from src.nmt.model.transformer import Transformer, create_model_from_config
-from src.nmt.training.dataset import TranslationDataset, create_dataloader
+from src.nmt.training.dataset import (
+    TranslationDataset,
+    TranslationDatasetStreaming,
+    create_dataloader,
+    create_streaming_dataloader
+)
 from src.nmt.training.trainer import Trainer
 from src.nmt.training.utils import set_seed, get_device
 
@@ -80,6 +85,8 @@ def parse_args():
                        help="Random seed")
     parser.add_argument("--validate-only", action="store_true",
                        help="Only run validation (requires --resume)")
+    parser.add_argument("--streaming", action="store_true",
+                       help="Use streaming dataset for large JSONL files (memory-efficient)")
     
     return parser.parse_args()
 
@@ -154,13 +161,24 @@ def main():
     # Load datasets
     print("\n--- Datasets ---")
     
-    train_dataset = TranslationDataset(
-        data_path=args.train_data,
-        tokenizer=tokenizer,
-        max_length=config.model.max_seq_len,
-        source_lang=f"<{config.source_lang}>",
-        target_lang=f"<{config.target_lang}>"
-    )
+    if args.streaming:
+        print("Using STREAMING mode (memory-efficient for large files)")
+        train_dataset = TranslationDatasetStreaming(
+            data_path=args.train_data,
+            tokenizer=tokenizer,
+            max_length=config.model.max_seq_len,
+            source_lang=f"<{config.source_lang}>",
+            target_lang=f"<{config.target_lang}>"
+        )
+        print(f"Streaming dataset from {args.train_data}")
+    else:
+        train_dataset = TranslationDataset(
+            data_path=args.train_data,
+            tokenizer=tokenizer,
+            max_length=config.model.max_seq_len,
+            source_lang=f"<{config.source_lang}>",
+            target_lang=f"<{config.target_lang}>"
+        )
     
     val_dataset = None
     if Path(args.val_data).exists():
@@ -173,13 +191,21 @@ def main():
         )
     
     # Create dataloaders
-    train_dataloader = create_dataloader(
-        train_dataset,
-        batch_size=config.training.batch_size,
-        shuffle=True,
-        num_workers=4,
-        pad_id=tokenizer.pad_id
-    )
+    if args.streaming:
+        train_dataloader = create_streaming_dataloader(
+            train_dataset,
+            batch_size=config.training.batch_size,
+            num_workers=0,  # Streaming works best with 0 workers
+            pad_id=tokenizer.pad_id
+        )
+    else:
+        train_dataloader = create_dataloader(
+            train_dataset,
+            batch_size=config.training.batch_size,
+            shuffle=True,
+            num_workers=4,
+            pad_id=tokenizer.pad_id
+        )
     
     val_dataloader = None
     if val_dataset:
