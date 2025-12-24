@@ -244,11 +244,10 @@ class TestTransformer(unittest.TestCase):
         
         # Embeddings should share weights
         self.assertTrue(model.src_embedding is model.tgt_embedding)
-        self.assertTrue(
-            torch.equal(
-                model.src_embedding.weight,
-                model.output_projection.weight
-            )
+        # Output projection should be tied to TOKEN embedding (not module)
+        self.assertIs(
+            model.src_embedding.token_embedding.weight,
+            model.output_projection.weight
         )
     
     def test_parameter_count(self):

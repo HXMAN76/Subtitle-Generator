@@ -126,7 +126,7 @@ class Transformer(nn.Module):
             # Tie output projection to embedding weights
             # This reduces parameters and often improves performance
             # (Press & Wolf, 2017 - "Using the Output Embedding to Improve Language Models")
-            self.output_projection.weight = self.src_embedding.weight
+            self.output_projection.weight = self.src_embedding.token_embedding.weight
         
         # Initialize weights
         self._init_weights()
