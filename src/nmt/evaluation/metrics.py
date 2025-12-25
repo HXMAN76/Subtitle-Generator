@@ -84,9 +84,16 @@ def compute_bleu(
         lowercase=lowercase
     )
     
+    # Version-agnostic signature extraction (sacrebleu <2.0 vs >=2.0)
+    signature = None
+    if hasattr(bleu, 'signature'):
+        signature = bleu.signature
+    elif hasattr(bleu, 'get_signature'):
+        signature = bleu.get_signature()
+    
     return {
         'score': bleu.score,
-        'signature': bleu.get_signature(),
+        'signature': signature,
         'precisions': bleu.precisions,
         'bp': bleu.bp,  # Brevity penalty
         'ratio': bleu.sys_len / bleu.ref_len if bleu.ref_len > 0 else 0
