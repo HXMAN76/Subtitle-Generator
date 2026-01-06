@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+import torch
+
 # Base paths
 BASE_DIR = Path(__file__).parent
 TEMP_DIR = BASE_DIR / "temp"
@@ -12,7 +14,7 @@ DATA_DIR = BASE_DIR / "data"
 
 # Whisper settings
 WHISPER_MODEL_SIZE = "tiny"  # Options: tiny, base, small, medium, large
-WHISPER_DEVICE = "cpu"  # Options: cpu, cuda
+WHISPER_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Auto-detect
 
 # Silero VAD settings
 VAD_THRESHOLD = 0.5
@@ -28,7 +30,7 @@ AUDIO_BITRATE = "192k"
 TRANSLATION_MODEL_PATH = MODELS_DIR / "translation" / "model.pt"
 TRANSLATION_VOCAB_PATH = MODELS_DIR / "translation" / "vocab.json"
 SOURCE_LANGUAGE = "en"
-TARGET_LANGUAGE = "es"  # Change as needed
+TARGET_LANGUAGE = "hi"  # Hindi - matches trained NMT model
 
 # Subtitle settings
 SUBTITLE_FORMAT = "srt"  # Options: srt, vtt

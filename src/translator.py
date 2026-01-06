@@ -157,6 +157,44 @@ class Translator:
             print(f"[Translator] Batch translation error: {e}")
             return texts
     
+    def translate_subtitles(
+        self,
+        transcriptions: list,
+        source_lang: str = "en",
+        target_lang: str = "hi"
+    ) -> list:
+        """Translate subtitle transcriptions.
+        
+        Args:
+            transcriptions: List of dicts with 'text', 'start', 'end' keys.
+            source_lang: Source language code.
+            target_lang: Target language code.
+        
+        Returns:
+            List of transcriptions with translated text.
+        """
+        if not self.available or self.translator is None:
+            print("[Translator] Model not available, returning original text")
+            return transcriptions
+        
+        # Extract texts for batch translation
+        texts = [t.get('text', '') for t in transcriptions]
+        
+        # Batch translate for efficiency
+        translated_texts = self.translate_batch(texts, source_lang, target_lang)
+        
+        # Reconstruct transcriptions with translated text
+        translated_transcriptions = []
+        for original, translated_text in zip(transcriptions, translated_texts):
+            translated_transcriptions.append({
+                'text': translated_text,
+                'start': original.get('start'),
+                'end': original.get('end'),
+                'original_text': original.get('text', '')  # Keep original for reference
+            })
+        
+        return translated_transcriptions
+    
     def is_available(self) -> bool:
         """Check if translation is available."""
         return self.available

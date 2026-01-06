@@ -1,6 +1,6 @@
 # Core dependencies
 moviepy>=1.0.3
-openai-whisper>=20230314
+faster-whisper>=1.0.0  # 3-4x faster than openai-whisper
 torch>=2.0.0
 torchaudio>=2.0.0
 torchvision 
