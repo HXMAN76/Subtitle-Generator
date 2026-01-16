@@ -10,8 +10,10 @@
 # 5. Train translation model
 #
 # Usage:
-#   ./scripts/train_pipeline.sh           # Interactive language selection
-#   ./scripts/train_pipeline.sh --force   # Force re-download all files
+#   ./scripts/train_pipeline.sh                    # Interactive mode
+#   ./scripts/train_pipeline.sh --lang hi          # Non-interactive (Hindi)
+#   ./scripts/train_pipeline.sh --lang ta --yes    # Auto-confirm training
+#   ./scripts/train_pipeline.sh --lang hi --force  # Force re-download
 #
 # Supported Languages:
 #   as - Assamese    bn - Bengali     gu - Gujarati
@@ -34,7 +36,9 @@ NC='\033[0m' # No Color
 DATA_DIR="data/raw"
 MODEL_DIR="models/translation"
 CONFIG="base"
-FORCE="${1:-}"
+LANG=""
+FORCE=""
+AUTO_YES=""
 
 # Language names
 declare -A LANG_NAMES=(
@@ -53,50 +57,114 @@ declare -A LANG_NAMES=(
 
 # Language codes in order
 LANG_CODES=("hi" "ta" "te" "bn" "mr" "gu" "kn" "ml" "pa" "or" "as")
+VALID_LANGS="as bn gu hi kn ml mr or pa ta te"
 
 # ============================================================================
-# Interactive Language Selection
+# Parse Command Line Arguments
+# ============================================================================
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --lang|-l)
+            LANG="$2"
+            shift 2
+            ;;
+        --force|-f)
+            FORCE="--force"
+            shift
+            ;;
+        --yes|-y)
+            AUTO_YES="true"
+            shift
+            ;;
+        --config|-c)
+            CONFIG="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --lang, -l LANG    Target language code (hi, ta, te, etc.)"
+            echo "  --yes, -y          Auto-confirm training (non-interactive)"
+            echo "  --force, -f        Force re-download even if files exist"
+            echo "  --config, -c CFG   Model config: base, small, debug (default: base)"
+            echo "  --help, -h         Show this help message"
+            echo ""
+            echo "Supported languages:"
+            echo "  as - Assamese    bn - Bengali     gu - Gujarati"
+            echo "  hi - Hindi       kn - Kannada     ml - Malayalam"
+            echo "  mr - Marathi     or - Odia        pa - Punjabi"
+            echo "  ta - Tamil       te - Telugu"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# ============================================================================
+# Header
 # ============================================================================
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║           NMT Training Pipeline - Samanantar Dataset         ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}Select target language for translation (English → ?):${NC}"
-echo ""
 
-# Display language options
-for i in "${!LANG_CODES[@]}"; do
-    code="${LANG_CODES[$i]}"
-    name="${LANG_NAMES[$code]}"
-    num=$((i + 1))
-    printf "  ${CYAN}%2d${NC}) %-3s - %s\n" "$num" "$code" "$name"
-done
+# ============================================================================
+# Language Selection (Interactive or from CLI)
+# ============================================================================
+if [[ -z "$LANG" ]]; then
+    # Interactive mode
+    echo -e "${YELLOW}Select target language for translation (English → ?):${NC}"
+    echo ""
 
-echo ""
-read -p "Enter choice [1-11] (default: 1 for Hindi): " choice
-echo ""
+    for i in "${!LANG_CODES[@]}"; do
+        code="${LANG_CODES[$i]}"
+        name="${LANG_NAMES[$code]}"
+        num=$((i + 1))
+        printf "  ${CYAN}%2d${NC}) %-3s - %s\n" "$num" "$code" "$name"
+    done
 
-# Default to Hindi if empty
-if [[ -z "$choice" ]]; then
-    choice=1
+    echo ""
+    read -p "Enter choice [1-11] (default: 1 for Hindi): " choice
+    echo ""
+
+    if [[ -z "$choice" ]]; then
+        choice=1
+    fi
+
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt 11 ]; then
+        echo -e "${RED}Error: Invalid choice. Please enter a number between 1 and 11.${NC}"
+        exit 1
+    fi
+
+    LANG="${LANG_CODES[$((choice - 1))]}"
+else
+    # Validate CLI language
+    if [[ ! " $VALID_LANGS " =~ " $LANG " ]]; then
+        echo -e "${RED}Error: Invalid language '$LANG'${NC}"
+        echo "Supported: $VALID_LANGS"
+        exit 1
+    fi
 fi
 
-# Validate choice
-if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt 11 ]; then
-    echo -e "${RED}Error: Invalid choice. Please enter a number between 1 and 11.${NC}"
-    exit 1
+echo -e "${GREEN}Target: ${LANG_NAMES[$LANG]} ($LANG)${NC}"
+echo -e "Config: ${CONFIG}"
+if [[ -n "$FORCE" ]]; then
+    echo -e "Mode: ${YELLOW}Force re-download${NC}"
 fi
-
-# Get selected language
-LANG="${LANG_CODES[$((choice - 1))]}"
-
-echo -e "${GREEN}Selected: ${LANG_NAMES[$LANG]} ($LANG)${NC}"
-echo ""
-echo -e "  Config: ${CONFIG}"
+if [[ -n "$AUTO_YES" ]]; then
+    echo -e "Mode: ${YELLOW}Auto-confirm (non-interactive)${NC}"
+fi
 echo ""
 
-# Helper function
+# ============================================================================
+# Helper Functions
+# ============================================================================
 print_step() {
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -119,11 +187,11 @@ print_step "1/5" "Download Dataset"
 
 TRAIN_FILE="${DATA_DIR}/train-en-${LANG}.jsonl"
 
-if [[ -f "$TRAIN_FILE" && "$FORCE" != "--force" ]]; then
+if [[ -f "$TRAIN_FILE" && -z "$FORCE" ]]; then
     print_skip "Dataset already exists: $TRAIN_FILE"
 else
     echo "Downloading ${LANG_NAMES[$LANG]} dataset from HuggingFace..."
-    python scripts/download_dataset.py --lang "$LANG" ${FORCE:+--force}
+    python scripts/download_dataset.py --lang "$LANG" ${FORCE}
     print_done "Dataset downloaded"
 fi
 
@@ -134,7 +202,7 @@ print_step "2/5" "Create Tokenizer Corpus"
 
 CORPUS_FILE="${DATA_DIR}/spm_corpus_multilang.txt"
 
-if [[ -f "$CORPUS_FILE" && "$FORCE" != "--force" ]]; then
+if [[ -f "$CORPUS_FILE" && -z "$FORCE" ]]; then
     print_skip "Corpus already exists: $CORPUS_FILE"
 else
     echo "Creating tokenizer corpus..."
@@ -149,7 +217,7 @@ print_step "3/5" "Create Validation Split"
 
 VAL_FILE="${DATA_DIR}/validation-en-${LANG}.jsonl"
 
-if [[ -f "$VAL_FILE" && "$FORCE" != "--force" ]]; then
+if [[ -f "$VAL_FILE" && -z "$FORCE" ]]; then
     print_skip "Validation file already exists: $VAL_FILE"
 else
     echo "Creating validation split..."
@@ -164,7 +232,7 @@ print_step "4/5" "Train Tokenizer"
 
 TOKENIZER_FILE="${MODEL_DIR}/nmt_spm.model"
 
-if [[ -f "$TOKENIZER_FILE" && "$FORCE" != "--force" ]]; then
+if [[ -f "$TOKENIZER_FILE" && -z "$FORCE" ]]; then
     print_skip "Tokenizer already exists: $TOKENIZER_FILE"
     TRAIN_TOKENIZER=""
 else
@@ -186,23 +254,27 @@ echo "  - Train Data: $TRAIN_FILE"
 echo "  - Val Data: $VAL_FILE"
 echo ""
 
-read -p "Start training? [Y/n] " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    echo ""
-    echo -e "${GREEN}Starting training...${NC}"
-    echo ""
-    
-    python scripts/train_nmt.py \
-        --target-lang "$LANG" \
-        --config "$CONFIG" \
-        --streaming \
-        $TRAIN_TOKENIZER
-    
-    print_done "Training complete"
-else
-    echo -e "${YELLOW}Training skipped${NC}"
+# Confirm training (or auto-confirm)
+if [[ -z "$AUTO_YES" ]]; then
+    read -p "Start training? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        echo -e "${YELLOW}Training skipped${NC}"
+        exit 0
+    fi
 fi
+
+echo ""
+echo -e "${GREEN}Starting training...${NC}"
+echo ""
+
+python scripts/train_nmt.py \
+    --target-lang "$LANG" \
+    --config "$CONFIG" \
+    --streaming \
+    $TRAIN_TOKENIZER
+
+print_done "Training complete"
 
 # ============================================================================
 # Summary
