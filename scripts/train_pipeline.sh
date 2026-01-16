@@ -39,6 +39,7 @@ CONFIG="base"
 LANG=""
 FORCE=""
 AUTO_YES=""
+SKIP_TRAIN=""
 
 # Language names
 declare -A LANG_NAMES=(
@@ -76,6 +77,10 @@ while [[ $# -gt 0 ]]; do
             AUTO_YES="true"
             shift
             ;;
+        --no|-n)
+            SKIP_TRAIN="true"
+            shift
+            ;;
         --config|-c)
             CONFIG="$2"
             shift 2
@@ -86,6 +91,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --lang, -l LANG    Target language code (hi, ta, te, etc.)"
             echo "  --yes, -y          Auto-confirm training (non-interactive)"
+            echo "  --no, -n           Skip training (only download and prepare data)"
             echo "  --force, -f        Force re-download even if files exist"
             echo "  --config, -c CFG   Model config: base, small, debug (default: base)"
             echo "  --help, -h         Show this help message"
@@ -254,27 +260,34 @@ echo "  - Train Data: $TRAIN_FILE"
 echo "  - Val Data: $VAL_FILE"
 echo ""
 
-# Confirm training (or auto-confirm)
-if [[ -z "$AUTO_YES" ]]; then
-    read -p "Start training? [Y/n] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Nn]$ ]]; then
-        echo -e "${YELLOW}Training skipped${NC}"
-        exit 0
+# Skip training if --no flag
+if [[ -n "$SKIP_TRAIN" ]]; then
+    echo -e "${YELLOW}Training skipped (--no flag)${NC}"
+else
+    # Confirm training (or auto-confirm)
+    if [[ -z "$AUTO_YES" ]]; then
+        read -p "Start training? [Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            echo -e "${YELLOW}Training skipped${NC}"
+            SKIP_TRAIN="true"
+        fi
+    fi
+
+    if [[ -z "$SKIP_TRAIN" ]]; then
+        echo ""
+        echo -e "${GREEN}Starting training...${NC}"
+        echo ""
+
+        python scripts/train_nmt.py \
+            --target-lang "$LANG" \
+            --config "$CONFIG" \
+            --streaming \
+            $TRAIN_TOKENIZER
+
+        print_done "Training complete"
     fi
 fi
-
-echo ""
-echo -e "${GREEN}Starting training...${NC}"
-echo ""
-
-python scripts/train_nmt.py \
-    --target-lang "$LANG" \
-    --config "$CONFIG" \
-    --streaming \
-    $TRAIN_TOKENIZER
-
-print_done "Training complete"
 
 # ============================================================================
 # Summary
