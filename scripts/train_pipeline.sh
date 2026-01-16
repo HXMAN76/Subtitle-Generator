@@ -10,9 +10,8 @@
 # 5. Train translation model
 #
 # Usage:
-#   ./scripts/train_pipeline.sh hi          # Train Hindi model
-#   ./scripts/train_pipeline.sh ta          # Train Tamil model
-#   ./scripts/train_pipeline.sh hi --force  # Force re-download
+#   ./scripts/train_pipeline.sh           # Interactive language selection
+#   ./scripts/train_pipeline.sh --force   # Force re-download all files
 #
 # Supported Languages:
 #   as - Assamese    bn - Bengali     gu - Gujarati
@@ -28,22 +27,14 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Default values
-LANG="${1:-hi}"
-FORCE="${2:-}"
 DATA_DIR="data/raw"
 MODEL_DIR="models/translation"
 CONFIG="base"
-
-# Validate language
-VALID_LANGS="as bn gu hi kn ml mr or pa ta te"
-if [[ ! " $VALID_LANGS " =~ " $LANG " ]]; then
-    echo -e "${RED}Error: Invalid language '$LANG'${NC}"
-    echo "Supported languages: $VALID_LANGS"
-    exit 1
-fi
+FORCE="${1:-}"
 
 # Language names
 declare -A LANG_NAMES=(
@@ -60,12 +51,48 @@ declare -A LANG_NAMES=(
     ["te"]="Telugu"
 )
 
+# Language codes in order
+LANG_CODES=("hi" "ta" "te" "bn" "mr" "gu" "kn" "ml" "pa" "or" "as")
+
+# ============================================================================
+# Interactive Language Selection
+# ============================================================================
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║           NMT Training Pipeline - Samanantar Dataset         ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  Target Language: ${GREEN}${LANG_NAMES[$LANG]} ($LANG)${NC}"
+echo -e "${YELLOW}Select target language for translation (English → ?):${NC}"
+echo ""
+
+# Display language options
+for i in "${!LANG_CODES[@]}"; do
+    code="${LANG_CODES[$i]}"
+    name="${LANG_NAMES[$code]}"
+    num=$((i + 1))
+    printf "  ${CYAN}%2d${NC}) %-3s - %s\n" "$num" "$code" "$name"
+done
+
+echo ""
+read -p "Enter choice [1-11] (default: 1 for Hindi): " choice
+echo ""
+
+# Default to Hindi if empty
+if [[ -z "$choice" ]]; then
+    choice=1
+fi
+
+# Validate choice
+if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt 11 ]; then
+    echo -e "${RED}Error: Invalid choice. Please enter a number between 1 and 11.${NC}"
+    exit 1
+fi
+
+# Get selected language
+LANG="${LANG_CODES[$((choice - 1))]}"
+
+echo -e "${GREEN}Selected: ${LANG_NAMES[$LANG]} ($LANG)${NC}"
+echo ""
 echo -e "  Config: ${CONFIG}"
 echo ""
 
