@@ -3,12 +3,19 @@
 Training Script for NMT Transformer.
 
 This script trains a production-grade Transformer model for
-English-Hindi translation.
+English to Indic language translation using the Samanantar dataset.
+
+Supported target languages: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
 
 Usage:
-    python scripts/train_nmt.py --config base
-    python scripts/train_nmt.py --config small --epochs 10
-    python scripts/train_nmt.py --resume models/translation/epoch_5.pt
+    # Train for Hindi (default)
+    python scripts/train_nmt.py --target-lang hi
+    
+    # Train with small config
+    python scripts/train_nmt.py --target-lang ta --config small
+    
+    # Resume training
+    python scripts/train_nmt.py --target-lang hi --resume models/translation/epoch_5.pt
 """
 
 import argparse
@@ -31,23 +38,43 @@ from src.nmt.training.dataset import (
 )
 from src.nmt.training.trainer import Trainer
 from src.nmt.training.utils import set_seed, get_device
+from src.nmt.languages import (
+    SUPPORTED_LANGUAGES,
+    DEFAULT_TARGET_LANGUAGE,
+    get_language_name,
+    validate_language
+)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train NMT Transformer")
+    parser = argparse.ArgumentParser(
+        description="Train NMT Transformer for English-Indic translation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Supported target languages:
+  as - Assamese    bn - Bengali     gu - Gujarati
+  hi - Hindi       kn - Kannada     ml - Malayalam
+  mr - Marathi     or - Odia        pa - Punjabi
+  ta - Tamil       te - Telugu
+"""
+    )
+    
+    # Target language
+    parser.add_argument("--target-lang", "-t", type=str,
+                       default=DEFAULT_TARGET_LANGUAGE,
+                       choices=list(SUPPORTED_LANGUAGES.keys()),
+                       help=f"Target language code (default: {DEFAULT_TARGET_LANGUAGE})")
     
     # Config
     parser.add_argument("--config", type=str, default="base",
                        choices=["base", "small", "debug"],
                        help="Model configuration preset")
     
-    # Data paths
-    parser.add_argument("--train-data", type=str, 
-                       default="data/raw/train-en-hi.json",
-                       help="Path to training data JSON file")
-    parser.add_argument("--val-data", type=str,
-                       default="data/raw/validation-en-hi.json",
-                       help="Path to validation data JSON file")
+    # Data paths (defaults are set dynamically based on target-lang)
+    parser.add_argument("--train-data", type=str, default=None,
+                       help="Path to training data JSONL file (default: data/raw/train-en-{lang}.jsonl)")
+    parser.add_argument("--val-data", type=str, default=None,
+                       help="Path to validation data JSONL file (default: data/raw/validation-en-{lang}.jsonl)")
     
     # Tokenizer
     parser.add_argument("--tokenizer", type=str,
@@ -56,7 +83,7 @@ def parse_args():
     parser.add_argument("--train-tokenizer", action="store_true",
                        help="Train a new tokenizer")
     parser.add_argument("--corpus", type=str,
-                       default="data/raw/spm_corpus.txt",
+                       default="data/raw/spm_corpus_multilang.txt",
                        help="Corpus for tokenizer training")
     
     # Training
@@ -94,8 +121,13 @@ def parse_args():
 def main():
     args = parse_args()
     
+    # Validate target language
+    validate_language(args.target_lang)
+    lang_name = get_language_name(args.target_lang)
+    
     print("=" * 60)
     print("NMT Transformer Training")
+    print(f"English → {lang_name} ({args.target_lang})")
     print("=" * 60)
     
     # Set seed
@@ -117,6 +149,9 @@ def main():
     else:
         config = get_debug_config()
     
+    # Set target language in config
+    config.target_lang = args.target_lang
+    
     # Override config with CLI arguments
     if args.epochs is not None:
         config.training.max_epochs = args.epochs
@@ -129,6 +164,10 @@ def main():
     
     config.model_dir = Path(args.output_dir)
     config.model_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Set data paths (dynamic based on target language if not specified)
+    train_data = args.train_data or f"data/raw/train-en-{args.target_lang}.jsonl"
+    val_data = args.val_data or f"data/raw/validation-en-{args.target_lang}.jsonl"
     
     # Train or load tokenizer
     print("\n--- Tokenizer ---")
@@ -160,20 +199,21 @@ def main():
     
     # Load datasets
     print("\n--- Datasets ---")
+    print(f"Target language: {lang_name} ({args.target_lang})")
     
     if args.streaming:
         print("Using STREAMING mode (memory-efficient for large files)")
         train_dataset = TranslationDatasetStreaming(
-            data_path=args.train_data,
+            data_path=train_data,
             tokenizer=tokenizer,
             max_length=config.model.max_seq_len,
             source_lang=f"<{config.source_lang}>",
             target_lang=f"<{config.target_lang}>"
         )
-        print(f"Streaming dataset from {args.train_data}")
+        print(f"Streaming dataset from {train_data}")
     else:
         train_dataset = TranslationDataset(
-            data_path=args.train_data,
+            data_path=train_data,
             tokenizer=tokenizer,
             max_length=config.model.max_seq_len,
             source_lang=f"<{config.source_lang}>",
@@ -181,9 +221,9 @@ def main():
         )
     
     val_dataset = None
-    if Path(args.val_data).exists():
+    if Path(val_data).exists():
         val_dataset = TranslationDataset(
-            data_path=args.val_data,
+            data_path=val_data,
             tokenizer=tokenizer,
             max_length=config.model.max_seq_len,
             source_lang=f"<{config.source_lang}>",

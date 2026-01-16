@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Optional, List
 import json
 
+from .languages import get_all_language_tags, DEFAULT_TARGET_LANGUAGE
+
 
 @dataclass
 class ModelConfig:
@@ -109,11 +111,14 @@ class TrainingConfig:
 
 @dataclass
 class TokenizerConfig:
-    """SentencePiece tokenizer configuration."""
+    """SentencePiece tokenizer configuration.
+    
+    Supports all 11 Indic languages from Samanantar dataset.
+    """
     
     vocab_size: int = 32000
     model_type: str = "bpe"      # "bpe" or "unigram"
-    character_coverage: float = 0.9995  # Higher for Devanagari script
+    character_coverage: float = 0.9995  # High coverage for Indic scripts
     
     # Special tokens
     pad_token: str = "<pad>"
@@ -121,12 +126,12 @@ class TokenizerConfig:
     bos_token: str = "<bos>"
     eos_token: str = "<eos>"
     
-    # Language tags for multilingual support
-    language_tags: List[str] = field(default_factory=lambda: ["<en>", "<hi>"])
+    # Language tags for multilingual support (en + 11 Indic languages)
+    language_tags: List[str] = field(default_factory=get_all_language_tags)
     
     # Paths
     model_prefix: str = "models/translation/nmt_spm"
-    corpus_path: str = "data/raw/spm_corpus.txt"
+    corpus_path: str = "data/raw/spm_corpus_multilang.txt"
 
 
 @dataclass 
@@ -142,9 +147,9 @@ class NMTConfig:
     model_dir: Path = Path("models/translation")
     output_dir: Path = Path("output")
     
-    # Language pair
+    # Language pair (source is always English, target is configurable)
     source_lang: str = "en"
-    target_lang: str = "hi"
+    target_lang: str = DEFAULT_TARGET_LANGUAGE
     
     def save(self, path: Path):
         """Save configuration to JSON file."""

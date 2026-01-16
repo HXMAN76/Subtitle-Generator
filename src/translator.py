@@ -4,15 +4,24 @@ Translator Module - NMT Integration.
 This module provides the Translator class that wraps the NMT subsystem
 for use in the main application pipeline.
 
+Supported target languages: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
+
 Note: Requires a trained NMT model. Without a trained model,
 translations will not be available.
 """
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import torch
+
+from src.nmt.languages import (
+    SUPPORTED_LANGUAGES,
+    get_all_language_tags,
+    is_supported_language,
+    get_language_name
+)
 
 
 class Translator:
@@ -67,10 +76,10 @@ class Translator:
             from src.nmt.tokenizer import Tokenizer
             from src.nmt.model.transformer import Transformer
             
-            # Load tokenizer
+            # Load tokenizer with all language tags
             tokenizer = Tokenizer(
                 model_path=str(tokenizer_path),
-                language_tags=["<en>", "<hi>"]
+                language_tags=get_all_language_tags()
             )
             
             # Load model
@@ -109,13 +118,19 @@ class Translator:
         
         Args:
             text: Text to translate.
-            source_lang: Source language code.
-            target_lang: Target language code.
+            source_lang: Source language code (always 'en').
+            target_lang: Target language code (as, bn, gu, hi, kn, ml, mr, or, pa, ta, te).
         
         Returns:
             Translated text, or original text if translation unavailable.
         """
         if not self.available or self.translator is None:
+            return text
+        
+        # Validate target language
+        if not is_supported_language(target_lang):
+            print(f"[Translator] Unsupported language: {target_lang}")
+            print(f"[Translator] Supported: {', '.join(sorted(SUPPORTED_LANGUAGES.keys()))}")
             return text
         
         try:
@@ -127,6 +142,10 @@ class Translator:
         except Exception as e:
             print(f"[Translator] Translation error: {e}")
             return text
+    
+    def get_supported_languages(self) -> List[str]:
+        """Get list of supported target language codes."""
+        return list(SUPPORTED_LANGUAGES.keys())
     
     def translate_batch(
         self,

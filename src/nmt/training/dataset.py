@@ -53,20 +53,56 @@ class TranslationDataset(Dataset):
         print(f"Loaded {len(self.data)} translation pairs from {data_path}")
     
     def _load_data(self, data_path: str) -> List[Dict[str, str]]:
-        """Load parallel sentences from JSON file."""
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        """Load parallel sentences from JSON or JSONL file.
         
-        # Validate format
-        if not isinstance(data, list):
-            raise ValueError("Data must be a list of dictionaries")
+        Supports:
+        - JSON array format: [{"source": "...", "target": "..."}, ...]
+        - JSONL format: {"source": "...", "target": "..."}\n{"source": "...", "target": "..."}
+        - Both {source, target} and {src, tgt} key formats (Samanantar uses src/tgt)
+        """
+        data = []
+        path = Path(data_path)
         
-        if len(data) > 0:
-            required_keys = {'source', 'target'}
-            if not required_keys.issubset(data[0].keys()):
-                raise ValueError(f"Each item must have keys: {required_keys}")
+        # Detect format by extension or content
+        if path.suffix == '.jsonl' or str(data_path).endswith('.jsonl'):
+            # JSONL format (one JSON object per line)
+            with open(data_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        item = json.loads(line)
+                        data.append(self._normalize_item(item))
+        else:
+            # Try JSON array format first
+            with open(data_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                
+            if content.startswith('['):
+                # JSON array
+                items = json.loads(content)
+                data = [self._normalize_item(item) for item in items]
+            else:
+                # Actually JSONL despite extension
+                for line in content.split('\n'):
+                    if line.strip():
+                        item = json.loads(line)
+                        data.append(self._normalize_item(item))
         
         return data
+    
+    def _normalize_item(self, item: Dict[str, str]) -> Dict[str, str]:
+        """Normalize item keys to {source, target} format.
+        
+        Supports both {source, target} and {src, tgt} (Samanantar format).
+        """
+        if 'source' in item and 'target' in item:
+            return item
+        elif 'src' in item and 'tgt' in item:
+            return {'source': item['src'], 'target': item['tgt']}
+        else:
+            raise ValueError(
+                f"Item must have either {{source, target}} or {{src, tgt}} keys. "
+                f"Got: {list(item.keys())}"
+            )
     
     def __len__(self) -> int:
         return len(self.data)
@@ -174,8 +210,22 @@ class TranslationDatasetStreaming(IterableDataset):
             for item in buffer:
                 yield self._process_item(item)
     
+    def _normalize_item(self, item: Dict[str, str]) -> Dict[str, str]:
+        """Normalize item keys to {source, target} format."""
+        if 'source' in item and 'target' in item:
+            return item
+        elif 'src' in item and 'tgt' in item:
+            return {'source': item['src'], 'target': item['tgt']}
+        else:
+            raise ValueError(
+                f"Item must have either {{source, target}} or {{src, tgt}} keys."
+            )
+    
     def _process_item(self, item: Dict[str, str]) -> Dict[str, torch.Tensor]:
         """Process a single item."""
+        # Normalize keys first
+        item = self._normalize_item(item)
+        
         src_ids = self.tokenizer.encode(
             item['source'],
             add_bos=True,

@@ -1,18 +1,57 @@
 # 🎬 Subtitle Generator & Translator
 
-A production-ready, offline subtitle generation and translation application using **Whisper** for speech-to-text, **Silero VAD** for voice activity detection, and a custom-trained neural translation model.
+A production-ready, offline subtitle generation and translation system with **REST API backend**. Uses **faster-whisper** for high-speed transcription and a **custom-trained Transformer NMT model** for neural machine translation (English → 11 Indic Languages).
 
 ---
 
 ## ✨ Features
 
-- **Audio Extraction** - Extract audio from video files (MP4, AVI, MKV, MOV, WebM, FLV)
-- **Voice Activity Detection** - Detect speech segments using Silero VAD
-- **Speech-to-Text** - Transcribe audio using OpenAI Whisper
-- **Custom Translation** - Translate subtitles using a custom-trained neural model (no cloud APIs)
-- **Subtitle Generation** - Generate SRT and VTT subtitle files
-- **Offline Operation** - Runs completely locally with no internet connection required
-- **Production Structure** - Clean, modular, and maintainable codebase
+| Feature | Description |
+|---------|-------------|
+| 🎙️ **Speech-to-Text** | High-speed transcription using faster-whisper (3-4x faster than OpenAI Whisper) |
+| 🌐 **Neural Translation** | Custom-trained 60M parameter Transformer for 11 Indic languages |
+| 🇮🇳 **Multi-Language** | Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese |
+| 🌐 **REST API** | FastAPI backend with Swagger docs, background jobs, file uploads |
+| 📝 **Subtitle Generation** | SRT and VTT format output |
+| 🔌 **Offline Operation** | Runs completely locally - no cloud APIs needed |
+| ⚡ **Full Audio Mode** | Processes entire audio in one pass for maximum speed |
+| 🎯 **Auto GPU/CPU** | Automatically uses CUDA if available, falls back to CPU |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SUBTITLE GENERATOR SYSTEM                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                      FastAPI Backend (api.py)                       │    │
+│  │                                                                     │    │
+│  │   POST /upload ──► Background Job ──► GET /jobs/{id}                │    │
+│  │   POST /translate ──► Instant Response                              │    │
+│  │   GET /download/{id}/original | translated                          │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                     │                                       │
+│                                     ▼                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     Processing Pipeline                             │    │ 
+│  │                                                                     │    │
+│  │  ┌─────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────┐  │    │
+│  │  │  Video  │───►│ Audio Extract│───►│ Transcribe  │───►│ Subtitles│ │    │
+│  │  │  Input  │    │   (FFmpeg)   │    │(faster-whisper)│ │  (SRT)  │  │    │
+│  │  └─────────┘    └──────────────┘    └──────┬──────┘    └─────────┘  │    │
+│  │                                            │                        │    │
+│  │                                            ▼                        │    │
+│  │                                    ┌──────────────┐    ┌─────────┐  │    │
+│  │                                    │  Translate   │───►│Subtitles│  │    │
+│  │                                    │(NMT Transformer)│ │  (Hindi)│  │    │
+│  │                                    └──────────────┘    └─────────┘  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -20,47 +59,38 @@ A production-ready, offline subtitle generation and translation application usin
 
 ```
 Subtitle-Generator/
-├── app.py                          # Main application entry point
-├── config.py                       # Configuration settings
-├── requirements.txt                # Python dependencies
-├── README.md                       # Documentation (this file)
+├── api.py                      # FastAPI REST backend
+├── app.py                      # CLI application (3-step pipeline)
+├── config.py                   # Configuration settings
+├── requirements.txt            # Dependencies
 │
-├── src/                            # Source code modules
-│   ├── __init__.py
-│   ├── audio_processor.py          # Audio extraction and segmentation
-│   ├── vad.py                      # Voice activity detection
-│   ├── transcriber.py              # Whisper transcription
-│   ├── translator.py               # Custom translation model
-│   └── subtitle_generator.py       # SRT/VTT generation
+├── src/                        # Core modules
+│   ├── audio_processor.py      # Video → Audio extraction
+│   ├── transcriber.py          # faster-whisper transcription
+│   ├── translator.py           # NMT translation wrapper
+│   ├── subtitle_generator.py   # SRT/VTT generation
+│   └── nmt/                    # Neural Machine Translation
+│       ├── model/              # Transformer architecture
+│       ├── training/           # Training pipeline
+│       ├── inference/          # Translation inference
+│       └── evaluation/         # BLEU/METEOR metrics
 │
-├── models/                         # Trained models
-│   └── translation/                # Translation model files
-│       ├── model.pt
-│       └── vocab.json
+├── scripts/                    # CLI tools
+│   ├── train_nmt.py           # Train translation model
+│   ├── evaluate_nmt.py        # Evaluate model quality
+│   ├── translate.py           # Interactive translation
+│   └── download_dataset.py    # Download training data
 │
-├── data/                           # Training data
-│   ├── raw/                        # Raw translation datasets
-│   └── processed/                  # Processed training data
-│       └── train_data.json
+├── models/translation/         # Trained models
+│   ├── best.pt                # Best checkpoint (60M params)
+│   └── nmt_spm.model          # SentencePiece tokenizer
 │
-├── scripts/                        # Utility scripts
-│   ├── train_translator.py         # Train translation model
-│   └── download_dataset.py         # Download training data
+├── docs/                       # Documentation
+│   └── ARCHITECTURE.md        # Detailed architecture
 │
-├── notebooks/                      # Jupyter notebooks
-│   └── data_exploration.ipynb      # Data exploration notebook
-│
-├── tests/                          # Test files
-│   ├── __init__.py
-│   ├── test_app.py                 # Application tests
-│   └── test_utils.py               # Test utilities
-│
-├── examples/                       # Example files
-│   └── sample_video.mp4            # Sample video for testing
-│
-├── output/                         # Generated subtitle files
-└── temp/                           # Temporary files
-    └── voice/                      # Segmented audio files
+├── data/                       # Training data
+├── output/                     # Generated subtitles
+└── temp/                       # Temporary files
 ```
 
 ---
@@ -71,360 +101,260 @@ Subtitle-Generator/
 
 - **Python 3.8+**
 - **FFmpeg** (for audio processing)
+- **CUDA** (optional, for GPU acceleration)
 
-### 1. Install FFmpeg
-
-| Platform | Command |
-|----------|---------|
-| **Linux** | `sudo apt-get install ffmpeg` |
-| **macOS** | `brew install ffmpeg` |
-| **Windows** | Download from [ffmpeg.org](https://ffmpeg.org/download.html) |
-
-### 2. Install Dependencies
+### Installation
 
 ```bash
+# Clone repository
+git clone https://github.com/your-repo/Subtitle-Generator.git
+cd Subtitle-Generator
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Run the Application
+---
+
+## 🌐 REST API Usage
+
+### Start the Server
 
 ```bash
+# Development (with auto-reload)
+uvicorn api:app --reload --host 0.0.0.0 --port 8000
+
+# Production
+uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Interactive Docs
+
+Open in browser: **http://localhost:8000/docs**
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | API info |
+| `GET` | `/health` | Health check & component status |
+| `GET` | `/docs` | **Swagger UI** (interactive docs) |
+| `POST` | `/upload` | Upload video → Start processing |
+| `GET` | `/jobs/{id}` | Check job status & progress |
+| `GET` | `/jobs` | List all jobs |
+| `GET` | `/download/{id}/original` | Download original subtitles |
+| `GET` | `/download/{id}/translated` | Download Hindi subtitles |
+| `POST` | `/translate` | Translate single text |
+| `POST` | `/translate/batch` | Translate multiple texts |
+| `DELETE` | `/jobs/{id}` | Delete job & files |
+
+### Example: Upload Video
+
+```bash
+curl -X POST "http://localhost:8000/upload" \
+  -F "file=@your_video.mp4" \
+  -F "translate=true" \
+  -F "format=srt"
+
+# Response: {"job_id": "abc123", "status_url": "/jobs/abc123"}
+```
+
+### Example: Check Job Status
+
+```bash
+curl http://localhost:8000/jobs/abc123
+
+# Response: {"status": "completed", "progress": 1.0, ...}
+```
+
+### Example: Translate Text
+
+```bash
+curl -X POST "http://localhost:8000/translate" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello world"}'
+
+# Response: {"original": "Hello world", "translated": "हेलो दुनिया"}
+```
+
+---
+
+## 💻 CLI Usage
+
+### Process a Video
+
+```bash
+# Edit video_path in app.py first
 python app.py
 ```
 
-> **Note:** Update the `video_path` in `app.py` to point to your video file before running.
+### Interactive Translation
 
-### 4. Output
-
-Subtitles will be generated in the `output/` folder:
-- `video_name_original.srt` — Original transcription
-- `video_name_es.srt` — Translated version (if translation model is trained)
+```bash
+python scripts/translate.py --checkpoint models/translation/best.pt --interactive
+```
 
 ---
 
 ## ⚙️ Configuration
 
-Edit `config.py` to customize settings:
+Edit `config.py`:
 
 ```python
 # Whisper settings
-WHISPER_MODEL_SIZE = "tiny"     # Options: tiny, base, small, medium, large
-WHISPER_DEVICE = "cpu"          # Options: cpu, cuda
+WHISPER_MODEL_SIZE = "tiny"   # tiny, base, small, medium, large-v3
+WHISPER_DEVICE = "cuda"       # Auto-detected (cuda/cpu)
 
 # Languages
 SOURCE_LANGUAGE = "en"
-TARGET_LANGUAGE = "es"          # Change as needed
+TARGET_LANGUAGE = "hi"        # Hindi
 
-# Subtitle settings
-SUBTITLE_FORMAT = "srt"         # Options: srt, vtt
-
-# VAD sensitivity
-VAD_THRESHOLD = 0.5             # Range: 0.0 to 1.0
+# Subtitle format
+SUBTITLE_FORMAT = "srt"       # srt, vtt
 ```
 
-### Whisper Model Comparison
+### Model Comparison
 
-| Model | Speed | Accuracy | Memory | Use Case |
-|-------|-------|----------|--------|----------|
-| `tiny` | ⚡ Fastest | Low | ~1 GB | Testing |
-| `base` | Fast | Good | ~1.5 GB | **Production** |
-| `small` | Medium | Better | ~2 GB | Quality |
-| `medium` | Slow | High | ~4 GB | Accuracy |
-| `large` | Slowest | Highest | ~8 GB | Best quality |
+| Model | Speed | Accuracy | VRAM | Use Case |
+|-------|-------|----------|------|----------|
+| `tiny` | ⚡⚡⚡⚡⚡ | 70% | 1GB | Testing |
+| `base` | ⚡⚡⚡⚡ | 80% | 1GB | General |
+| `small` | ⚡⚡⚡ | 88% | 2GB | **Recommended** |
+| `medium` | ⚡⚡ | 92% | 5GB | Quality |
+| `large-v3` | ⚡ | 95% | 10GB | Professional |
 
 ---
 
-## 📖 Advanced Usage
+## 🧠 Translation Model
 
-### Programmatic API
+### Supported Languages
 
-```python
-from src.audio_processor import AudioProcessor
-from src.vad import VoiceActivityDetector
-from src.transcriber import Transcriber
-from src.translator import Translator
-from src.subtitle_generator import SubtitleGenerator
+| Code | Language | Dataset Size |
+|------|----------|-------------|
+| `hi` | Hindi | 8.6M pairs |
+| `ta` | Tamil | 5.3M pairs |
+| `te` | Telugu | 4.8M pairs |
+| `bn` | Bengali | 8.5M pairs |
+| `mr` | Marathi | 3.6M pairs |
+| `gu` | Gujarati | 3.1M pairs |
+| `kn` | Kannada | 4.0M pairs |
+| `ml` | Malayalam | 5.8M pairs |
+| `pa` | Punjabi | 2.4M pairs |
+| `or` | Odia | 1.0M pairs |
+| `as` | Assamese | 140K pairs |
 
-# Initialize components
-audio_processor = AudioProcessor()
-vad = VoiceActivityDetector()
-transcriber = Transcriber()
-translator = Translator()
-subtitle_gen = SubtitleGenerator()
+### Architecture
 
-# Process video
-audio_path = audio_processor.convert_video_to_audio("video.mp4")
-speech_timestamps = vad.detect_speech(audio_path)
-segments = audio_processor.segment_audio(audio_path, speech_timestamps)
-transcriptions = transcriber.transcribe_segments(segments)
+- **Type**: Transformer (Encoder-Decoder)
+- **Parameters**: 60.52 Million
+- **Layers**: 6 encoder + 6 decoder
+- **Attention Heads**: 8
+- **Hidden Dim**: 512
+- **Tokenizer**: SentencePiece (32K vocab)
+- **Dataset**: AI4Bharat Samanantar (49.6M pairs)
 
-# Generate subtitles
-subtitle_gen.generate_subtitles(transcriptions, "output", format="srt")
-
-# Translate (if model is trained)
-translated = translator.translate_subtitles(transcriptions)
-subtitle_gen.generate_subtitles(translated, "output_translated", format="srt")
-```
-
-### Using the SubtitleApp Class
-
-```python
-from app import SubtitleApp
-
-app = SubtitleApp()
-results = app.process_video(
-    video_path="your_video.mp4",
-    translate=True  # Enable translation
-)
-```
-
-### Batch Processing
-
-```python
-import glob
-from app import SubtitleApp
-
-app = SubtitleApp()
-
-# Process all MP4 files
-for video in glob.glob("*.mp4"):
-    print(f"Processing {video}...")
-    app.process_video(video, translate=False)
-```
-
----
-
-## 🧠 Training the Translation Model
-
-### 1. Prepare Training Data
-
-Create a JSON file with parallel sentences at `data/processed/train_data.json`:
-
-```json
-[
-  {"source": "Hello world", "target": "Hola mundo"},
-  {"source": "Good morning", "target": "Buenos días"},
-  {"source": "How are you?", "target": "¿Cómo estás?"}
-]
-```
-
-**Get Training Data:**
-- Download parallel corpora from [OPUS](https://opus.nlpl.eu/)
-- Use [Tatoeba](https://tatoeba.org/) for sentence pairs
-- Create your own dataset
-
-### 2. Train the Model
+### Train Your Own Model
 
 ```bash
-python scripts/train_translator.py
-```
+# Download dataset for a specific language
+python scripts/download_dataset.py --lang hi    # Hindi
+python scripts/download_dataset.py --lang ta    # Tamil
+python scripts/download_dataset.py --all-langs  # All languages
 
-Training time depends on dataset size (typically 10-30 minutes for 10K sentence pairs).
+# Create combined tokenizer corpus
+python scripts/download_dataset.py --lang hi ta te --create-corpus
 
-### 3. Model Architecture
+# Train model for Hindi
+python scripts/train_nmt.py --target-lang hi --streaming
 
-- **Encoder:** Bidirectional LSTM
-- **Decoder:** LSTM with attention
-- **Embeddings:** 256 dimensions
-- **Hidden:** 512 dimensions
-- **Layers:** 2 LSTM layers
+# Train for Tamil with small config
+python scripts/train_nmt.py --target-lang ta --config small
 
-The trained model will be saved to `models/translation/`.
-
----
-
-## 📦 Building as Executable (.exe)
-
-### Quick Build
-
-```bash
-pip install pyinstaller
-pyinstaller --onefile --name SubtitleGenerator --add-data "src:src" --add-data "config.py:." --add-data "models:models" --hidden-import=whisper --hidden-import=torch app.py
-```
-
-### Using Spec File
-
-Create `subtitle_generator.spec`:
-
-```python
-# -*- mode: python ; coding: utf-8 -*-
-
-block_cipher = None
-
-a = Analysis(
-    ['app.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('src', 'src'),
-        ('models', 'models'),
-        ('config.py', '.'),
-    ],
-    hiddenimports=[
-        'whisper',
-        'torch',
-        'moviepy',
-        'pydub',
-        'numpy',
-        'scipy',
-        'tiktoken',
-        'regex',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='SubtitleGenerator',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    console=True,
-    icon='icon.ico'  # Optional
-)
-```
-
-Then build:
-
-```bash
-pyinstaller subtitle_generator.spec
-```
-
-### Distribution Package
-
-```
-SubtitleGenerator/
-├── SubtitleGenerator.exe       # Main executable
-├── ffmpeg.exe                  # Required
-├── ffprobe.exe                 # Required
-├── models/                     # Model files
-│   └── translation/
-│       ├── model.pt
-│       └── vocab.json
-├── output/                     # Empty folder
-├── temp/                       # Empty folder
-└── README.txt                  # Usage instructions
-```
-
-### Optimizations
-
-**Reduce File Size:**
-- Use smaller Whisper model (tiny or base)
-- Install CPU-only PyTorch: `pip install torch --index-url https://download.pytorch.org/whl/cpu`
-- Enable UPX compression
-
-**Pre-download Models:**
-```python
-import whisper
-import torch
-
-whisper.load_model("tiny")  # Downloads once
-model, utils = torch.hub.load('snakers4/silero-vad', 'silero_vad')
+# Evaluate
+python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples 10
 ```
 
 ---
 
-## 🔧 Troubleshooting
+## 📊 Performance
+
+### Time Estimates (2-hour video)
+
+| Step | Time (GPU) | Time (CPU) |
+|------|------------|------------|
+| Audio Extraction | 30 sec | 30 sec |
+| Transcription | 15-25 min | 60-90 min |
+| Translation | 5-10 min | 15-20 min |
+| **Total** | **25-40 min** | **90-120 min** |
+
+### Optimizations Applied
+
+- ✅ **faster-whisper**: 3-4x faster than OpenAI Whisper
+- ✅ **Full Audio Mode**: Single-pass processing
+- ✅ **Batch Translation**: Efficient GPU utilization
+- ✅ **Background Jobs**: Non-blocking API requests
+- ✅ **Lazy Loading**: Models load on first request
+
+---
+
+## 🛠️ Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| **FFmpeg not found** | Install FFmpeg and ensure it's in your PATH |
-| **Out of memory** | Use a smaller Whisper model (tiny or base) |
-| **CUDA error** | Set `WHISPER_DEVICE = "cpu"` in `config.py` |
-| **Translation returns original text** | Train the translation model first |
-| **Poor transcription quality** | Use larger Whisper model or improve audio quality |
+| FFmpeg not found | Install FFmpeg and add to PATH |
+| CUDA out of memory | Use smaller Whisper model (`tiny` or `base`) |
+| Translation returns original | Ensure `models/translation/best.pt` exists |
+| Slow transcription | Check `WHISPER_DEVICE` is `cuda` |
+| API port in use | Change port: `uvicorn api:app --port 8001` |
 
 ---
 
-## 🎯 Performance Tips
-
-1. **Use GPU** - If you have CUDA, set `WHISPER_DEVICE = "cuda"` in config
-2. **Smaller Models** - Use "tiny" for quick testing, "base" for production
-3. **VAD Tuning** - Adjust `VAD_THRESHOLD` (0.3-0.7) based on audio quality
-4. **Batch Processing** - Process multiple videos in sequence to reuse loaded models
-
-### Benchmark (1-minute video, Intel i7, 16GB RAM)
-
-| Model | Time |
-|-------|------|
-| tiny | ~5 seconds |
-| base | ~15 seconds |
-| small | ~30 seconds |
-| medium | ~60 seconds |
-| large | ~2-3 minutes |
-
----
-
-## 🔧 Dependencies
+## 📦 Dependencies
 
 ### Core
-- **moviepy** - Video/audio processing
-- **openai-whisper** - Speech-to-text transcription
+- **faster-whisper** - CTranslate2-optimized Whisper
 - **torch** - Neural network framework
-- **pydub** - Audio manipulation
-- **silero-vad** - Voice activity detection
+- **sentencepiece** - Tokenization
+- **moviepy** - Video processing
+
+### API
+- **fastapi** - REST API framework
+- **uvicorn** - ASGI server
+- **python-multipart** - File uploads
 
 ### System
-- **FFmpeg** - Required for audio processing
-- **Python 3.8+** - Development
-
----
-
-## 📊 Supported Formats
-
-### Video Input
-- MP4 (recommended)
-- AVI, MKV, MOV
-- WebM, FLV
-
-### Subtitle Output
-- SRT (SubRip)
-- VTT (WebVTT)
+- **FFmpeg** - Audio extraction
+- **CUDA** (optional) - GPU acceleration
 
 ---
 
 ## 🎯 Roadmap
 
-- [ ] GUI interface
-- [ ] Batch processing CLI
-- [ ] Multiple language support
-- [ ] Real-time subtitling
-- [ ] Custom model fine-tuning interface
-- [ ] Subtitle editing capabilities
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Please feel free to submit a Pull Request.
+- [x] faster-whisper integration
+- [x] Full audio mode
+- [x] Custom NMT model
+- [x] REST API backend
+- [x] Multiple language pairs (11 Indic languages)
+- [ ] Music detection (`[♪ Music ♪]`)
+- [ ] Web UI frontend
+- [ ] Docker deployment
 
 ---
 
 ## 📝 License
 
-MIT License - feel free to use for personal or commercial projects.
+MIT License - free for personal and commercial use.
 
 ---
 
-## 📞 Support
+## 🙏 Acknowledgments
 
-For issues or questions, please open an issue on GitHub.
-
----
-
-**Note:** This application runs completely offline. Initial setup requires internet to download Whisper models and dependencies, but afterward, it works without any cloud connections.
+- [faster-whisper](https://github.com/guillaumekln/faster-whisper) - High-speed transcription
+- [FastAPI](https://fastapi.tiangolo.com/) - Modern API framework
+- [AI4Bharat Samanantar](https://huggingface.co/datasets/ai4bharat/samanantar) - Multi-language training data
+- [SentencePiece](https://github.com/google/sentencepiece) - Tokenization

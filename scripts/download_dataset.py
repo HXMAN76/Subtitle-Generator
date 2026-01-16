@@ -1,18 +1,29 @@
 """
-Download and prepare training datasets for translation model.
+Download and prepare Samanantar dataset for translation model training.
 
-This script downloads parallel corpora from Hugging Face datasets
-and saves them in a clean JSON format for training.
+Downloads parallel corpora from AI4Bharat's Samanantar dataset (HuggingFace)
+and saves them in JSONL format for training.
 
-Downloads:
-- train-en-hi.json (1.6M+ sentence pairs)
-- validation-en-hi.json (520 pairs)
-- test-en-hi.json (2507 pairs)
+Samanantar is the largest publicly available parallel corpora collection
+for Indic languages with 49.6M English-Indic sentence pairs.
+
+Supported languages: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
 
 Usage:
+    # Download Hindi dataset (default)
     python scripts/download_dataset.py
-    python scripts/download_dataset.py --split validation  # Download specific split
-    python scripts/download_dataset.py --all               # Force re-download all
+    
+    # Download specific language
+    python scripts/download_dataset.py --lang ta
+    
+    # Download multiple languages
+    python scripts/download_dataset.py --lang hi ta te
+    
+    # Download all languages
+    python scripts/download_dataset.py --all-langs
+    
+    # Verify existing files
+    python scripts/download_dataset.py --verify
 """
 
 import argparse
@@ -20,17 +31,36 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.nmt.languages import (
+    SUPPORTED_LANGUAGES,
+    LANGUAGE_SIZES,
+    SOURCE_LANGUAGE,
+    DEFAULT_TARGET_LANGUAGE,
+    get_all_language_tags
+)
 
-def download_en_hi_dataset(splits=None, force=False):
-    """Download English-Hindi parallel corpus from IITB.
+
+def download_samanantar(
+    languages: List[str],
+    output_dir: Path,
+    force: bool = False,
+    max_samples: Optional[int] = None
+) -> bool:
+    """Download Samanantar dataset for specified languages.
     
     Args:
-        splits: List of splits to download. None means all ['train', 'validation', 'test']
-        force: If True, re-download even if files exist
+        languages: List of target language codes (e.g., ['hi', 'ta']).
+        output_dir: Directory to save downloaded files.
+        force: If True, re-download even if files exist.
+        max_samples: Maximum number of samples per language (for testing).
+    
+    Returns:
+        True if all downloads succeeded.
     """
     try:
         from datasets import load_dataset
@@ -38,129 +68,319 @@ def download_en_hi_dataset(splits=None, force=False):
         print("Please install the datasets library:")
         print("  pip install datasets")
         return False
-
-    if splits is None:
-        splits = ["train", "validation", "test"]
     
-    output_dir = Path("data/raw")
     output_dir.mkdir(parents=True, exist_ok=True)
+    success = True
     
-    # Check which splits need downloading
-    splits_to_download = []
-    for split in splits:
-        output_path = output_dir / f"{split}-en-hi.json"
-        if force or not output_path.exists():
-            splits_to_download.append(split)
-        else:
-            print(f"✓ {output_path} already exists (use --all to force re-download)")
-    
-    if not splits_to_download:
-        print("\nAll files already exist!")
-        return True
-    
-    print(f"\nDownloading English-Hindi dataset (IITB)...")
-    print(f"Splits to download: {splits_to_download}")
-    
-    ds = load_dataset("cfilt/iitb-english-hindi")
-    
-    for split in splits_to_download:
-        print(f"\nProcessing {split} split...")
-        
-        data = []
-        for item in ds[split]:
-            data.append({
-                "source": item["translation"]["en"].strip(),
-                "target": item["translation"]["hi"].strip()
-            })
-        
-        output_path = output_dir / f"{split}-en-hi.json"
-        
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        print(f"✅ Saved {len(data):,} samples to {output_path}")
-    
-    return True
-
-
-def verify_dataset():
-    """Verify all dataset files exist and are valid JSON."""
-    output_dir = Path("data/raw")
-    files = ["train-en-hi.json", "validation-en-hi.json", "test-en-hi.json"]
-    
-    print("\n--- Dataset Verification ---")
-    all_valid = True
-    
-    for filename in files:
-        filepath = output_dir / filename
-        if not filepath.exists():
-            print(f"❌ {filename}: NOT FOUND")
-            all_valid = False
+    for lang in languages:
+        if lang not in SUPPORTED_LANGUAGES:
+            print(f"❌ Unsupported language: {lang}")
+            print(f"   Supported: {', '.join(sorted(SUPPORTED_LANGUAGES.keys()))}")
+            success = False
             continue
         
+        train_path = output_dir / f"train-en-{lang}.jsonl"
+        
+        if not force and train_path.exists():
+            print(f"✓ {train_path.name} already exists (use --force to re-download)")
+            continue
+        
+        lang_name = SUPPORTED_LANGUAGES[lang]
+        size = LANGUAGE_SIZES.get(lang, "?")
+        print(f"\n{'='*50}")
+        print(f"Downloading: English → {lang_name} ({lang})")
+        print(f"Approximate size: {size} sentence pairs")
+        print(f"{'='*50}")
+        
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            print(f"✅ {filename}: {len(data):,} samples")
+            # Load dataset for this language pair
+            print(f"Loading from HuggingFace: ai4bharat/samanantar ({lang})...")
+            ds = load_dataset(
+                "ai4bharat/samanantar",
+                lang,
+                split="train",
+                trust_remote_code=True
+            )
+            
+            # Write to JSONL file
+            print(f"Writing to {train_path}...")
+            count = 0
+            
+            with open(train_path, "w", encoding="utf-8") as f:
+                for item in ds:
+                    if max_samples and count >= max_samples:
+                        break
+                    
+                    # Samanantar format: src (English), tgt (target language)
+                    record = {
+                        "source": item["src"].strip(),
+                        "target": item["tgt"].strip()
+                    }
+                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    count += 1
+                    
+                    if count % 100000 == 0:
+                        print(f"  Processed {count:,} samples...")
+            
+            print(f"✅ Saved {count:,} samples to {train_path}")
+            
+        except Exception as e:
+            print(f"❌ Error downloading {lang}: {e}")
+            success = False
+    
+    return success
+
+
+def verify_datasets(output_dir: Path) -> bool:
+    """Verify all dataset files exist and are valid.
+    
+    Args:
+        output_dir: Directory containing dataset files.
+    
+    Returns:
+        True if all files are valid.
+    """
+    print("\n--- Dataset Verification ---")
+    
+    found_any = False
+    all_valid = True
+    
+    for lang in sorted(SUPPORTED_LANGUAGES.keys()):
+        train_path = output_dir / f"train-en-{lang}.jsonl"
+        
+        if not train_path.exists():
+            continue
+        
+        found_any = True
+        
+        try:
+            # Count lines and validate JSON
+            count = 0
+            with open(train_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        json.loads(line)  # Validate JSON
+                        count += 1
+            
+            lang_name = SUPPORTED_LANGUAGES[lang]
+            print(f"✅ {train_path.name}: {count:,} samples ({lang_name})")
+            
         except json.JSONDecodeError as e:
-            print(f"❌ {filename}: JSON ERROR at line {e.lineno}")
+            print(f"❌ {train_path.name}: JSON ERROR - {e}")
             all_valid = False
+        except Exception as e:
+            print(f"❌ {train_path.name}: ERROR - {e}")
+            all_valid = False
+    
+    if not found_any:
+        print("No dataset files found in", output_dir)
+        print("Run: python scripts/download_dataset.py --lang hi")
+        return False
     
     return all_valid
 
 
-def create_spm_corpus():
-    """Create combined corpus for SentencePiece tokenizer training."""
-    output_dir = Path("data/raw")
-    train_file = output_dir / "train-en-hi.json"
-    corpus_file = output_dir / "spm_corpus.txt"
+def create_combined_corpus(output_dir: Path, languages: List[str]) -> bool:
+    """Create combined corpus for SentencePiece tokenizer training.
     
-    if not train_file.exists():
-        print("❌ train-en-hi.json not found. Run download first.")
+    Args:
+        output_dir: Directory containing dataset files.
+        languages: List of language codes to include.
+    
+    Returns:
+        True if corpus was created successfully.
+    """
+    corpus_path = output_dir / "spm_corpus_multilang.txt"
+    print(f"\nCreating combined corpus for tokenizer training...")
+    
+    total_lines = 0
+    
+    with open(corpus_path, "w", encoding="utf-8") as out_f:
+        for lang in languages:
+            train_path = output_dir / f"train-en-{lang}.jsonl"
+            
+            if not train_path.exists():
+                print(f"  ⚠️ Skipping {lang}: file not found")
+                continue
+            
+            print(f"  Processing {lang}...")
+            count = 0
+            
+            with open(train_path, "r", encoding="utf-8") as in_f:
+                for line in in_f:
+                    if line.strip():
+                        record = json.loads(line)
+                        # Write both source and target
+                        out_f.write(record["source"] + "\n")
+                        out_f.write(record["target"] + "\n")
+                        count += 2
+            
+            total_lines += count
+            print(f"    Added {count:,} lines from {lang}")
+    
+    print(f"\n✅ Created {corpus_path}")
+    print(f"   Total lines: {total_lines:,}")
+    
+    return True
+
+
+def create_validation_split(
+    output_dir: Path,
+    lang: str,
+    val_size: int = 2000
+) -> bool:
+    """Create validation split from training data.
+    
+    Args:
+        output_dir: Directory containing dataset files.
+        lang: Language code.
+        val_size: Number of samples for validation.
+    
+    Returns:
+        True if split was created successfully.
+    """
+    train_path = output_dir / f"train-en-{lang}.jsonl"
+    val_path = output_dir / f"validation-en-{lang}.jsonl"
+    
+    if not train_path.exists():
+        print(f"❌ Training file not found: {train_path}")
         return False
     
-    print(f"\nCreating SentencePiece corpus from training data...")
+    if val_path.exists():
+        print(f"✓ Validation file already exists: {val_path}")
+        return True
     
-    with open(train_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    print(f"Creating validation split for {lang} ({val_size} samples)...")
     
-    with open(corpus_file, "w", encoding="utf-8") as f:
-        for item in data:
-            f.write(item["source"] + "\n")
-            f.write(item["target"] + "\n")
+    # Read all lines, take last val_size for validation
+    lines = []
+    with open(train_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
     
-    print(f"✅ Created {corpus_file} ({len(data) * 2:,} lines)")
+    if len(lines) <= val_size:
+        print(f"  ⚠️ Not enough data for split (only {len(lines)} samples)")
+        return False
+    
+    # Use last val_size as validation
+    val_lines = lines[-val_size:]
+    train_lines = lines[:-val_size]
+    
+    # Write validation file
+    with open(val_path, "w", encoding="utf-8") as f:
+        f.writelines(val_lines)
+    
+    # Rewrite training file without validation samples
+    with open(train_path, "w", encoding="utf-8") as f:
+        f.writelines(train_lines)
+    
+    print(f"✅ Created {val_path.name} ({val_size} samples)")
+    print(f"   Training samples remaining: {len(train_lines):,}")
+    
     return True
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Download NMT training datasets")
-    parser.add_argument("--split", type=str, choices=["train", "validation", "test"],
-                       help="Download specific split only")
-    parser.add_argument("--all", action="store_true",
-                       help="Force re-download all splits")
-    parser.add_argument("--verify", action="store_true",
-                       help="Only verify existing files")
-    parser.add_argument("--corpus", action="store_true",
-                       help="Also create SentencePiece corpus file")
+    parser = argparse.ArgumentParser(
+        description="Download Samanantar dataset for NMT training",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Supported Languages:
+  as - Assamese    bn - Bengali     gu - Gujarati
+  hi - Hindi       kn - Kannada     ml - Malayalam
+  mr - Marathi     or - Odia        pa - Punjabi
+  ta - Tamil       te - Telugu
+
+Examples:
+  python scripts/download_dataset.py --lang hi         # Download Hindi
+  python scripts/download_dataset.py --lang hi ta te   # Download multiple
+  python scripts/download_dataset.py --all-langs       # Download all
+"""
+    )
+    
+    parser.add_argument(
+        "--lang", "-l",
+        nargs="+",
+        default=[DEFAULT_TARGET_LANGUAGE],
+        help=f"Target language(s) to download (default: {DEFAULT_TARGET_LANGUAGE})"
+    )
+    parser.add_argument(
+        "--all-langs",
+        action="store_true",
+        help="Download all supported languages"
+    )
+    parser.add_argument(
+        "--output-dir", "-o",
+        type=str,
+        default="data/raw",
+        help="Output directory (default: data/raw)"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-download even if files exist"
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Only verify existing files"
+    )
+    parser.add_argument(
+        "--create-corpus",
+        action="store_true",
+        help="Create combined corpus for tokenizer training"
+    )
+    parser.add_argument(
+        "--create-val-split",
+        action="store_true",
+        help="Create validation split from training data"
+    )
+    parser.add_argument(
+        "--val-size",
+        type=int,
+        default=2000,
+        help="Validation split size (default: 2000)"
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Maximum samples per language (for testing)"
+    )
     
     args = parser.parse_args()
+    output_dir = Path(args.output_dir)
     
-    print("=" * 50)
-    print("NMT Dataset Downloader (IITB English-Hindi)")
-    print("=" * 50)
+    print("=" * 60)
+    print("Samanantar Dataset Downloader")
+    print("AI4Bharat English-Indic Parallel Corpus")
+    print("=" * 60)
+    
+    # Determine which languages to download
+    if args.all_langs:
+        languages = list(SUPPORTED_LANGUAGES.keys())
+        print(f"\nDownloading ALL {len(languages)} languages...")
+    else:
+        languages = args.lang
+        print(f"\nLanguages: {', '.join(languages)}")
     
     if args.verify:
-        verify_dataset()
+        verify_datasets(output_dir)
     else:
-        splits = [args.split] if args.split else None
-        success = download_en_hi_dataset(splits=splits, force=args.all)
+        success = download_samanantar(
+            languages=languages,
+            output_dir=output_dir,
+            force=args.force,
+            max_samples=args.max_samples
+        )
         
         if success:
-            verify_dataset()
+            verify_datasets(output_dir)
             
-            if args.corpus:
-                create_spm_corpus()
+            if args.create_val_split:
+                for lang in languages:
+                    create_validation_split(output_dir, lang, args.val_size)
+            
+            if args.create_corpus:
+                create_combined_corpus(output_dir, languages)
     
     print("\nDone!")
-

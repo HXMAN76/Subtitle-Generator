@@ -15,6 +15,12 @@ nltk>=3.8.0
 # Audio processing
 ffmpeg-python>=0.2.0
 
+# API Backend
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
+
 # Silero VAD (loaded from torch.hub)
 # No package needed - loaded via torch.hub.load()
 
