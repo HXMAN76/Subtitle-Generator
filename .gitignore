@@ -52,6 +52,7 @@ temp/
 *.temp
 *.cache
 train_nmt.sh
+train_all_langs.sh
 backups/*
 # ============================================
 # Output Files
