@@ -97,9 +97,8 @@ Supported target languages:
     # Checkpointing
     parser.add_argument("--resume", type=str, default=None,
                        help="Path to checkpoint to resume from")
-    parser.add_argument("--output-dir", type=str, 
-                       default="models/translation",
-                       help="Output directory for checkpoints")
+    parser.add_argument("--output-dir", type=str, default=None,
+                       help="Output directory for checkpoints (default: models/translation/{lang})")
     
     # Hardware
     parser.add_argument("--device", type=str, default=None,
@@ -162,8 +161,11 @@ def main():
     if args.no_amp:
         config.training.use_amp = False
     
-    config.model_dir = Path(args.output_dir)
+    # Set output directory (language-specific to avoid collisions)
+    output_dir = args.output_dir or f"models/translation/{args.target_lang}"
+    config.model_dir = Path(output_dir)
     config.model_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Output directory: {config.model_dir}")
     
     # Set data paths (dynamic based on target language if not specified)
     train_data = args.train_data or f"data/raw/train-en-{args.target_lang}.jsonl"

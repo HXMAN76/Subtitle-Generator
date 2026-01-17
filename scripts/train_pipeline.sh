@@ -34,7 +34,7 @@ NC='\033[0m' # No Color
 
 # Default values
 DATA_DIR="data/raw"
-MODEL_DIR="models/translation"
+MODEL_DIR_BASE="models/translation"
 CONFIG="base"
 LANG=""
 FORCE=""
@@ -58,7 +58,7 @@ declare -A LANG_NAMES=(
 
 # Language codes in order
 LANG_CODES=("hi" "ta" "te" "bn" "mr" "gu" "kn" "ml" "pa" "or" "as")
-VALID_LANGS="as bn gu hi kn ml mr or pa ta te"
+VALID_LANGS="as bn gu hi kn ml mr or pa ta te"w
 
 # ============================================================================
 # Parse Command Line Arguments
@@ -160,6 +160,11 @@ fi
 
 echo -e "${GREEN}Target: ${LANG_NAMES[$LANG]} ($LANG)${NC}"
 echo -e "Config: ${CONFIG}"
+
+# Set language-specific model directory
+MODEL_DIR="${MODEL_DIR_BASE}/${LANG}"
+echo -e "Output: ${MODEL_DIR}"
+
 if [[ -n "$FORCE" ]]; then
     echo -e "Mode: ${YELLOW}Force re-download${NC}"
 fi
