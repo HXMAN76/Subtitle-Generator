@@ -78,6 +78,8 @@ models/translation/**/training_log.jsonl
 # ============================================
 data/raw/*
 !data/raw/.gitkeep
+data/asr/*
+!data/asr/.gitkeep
 
 # ============================================
 # IDE / Editor
