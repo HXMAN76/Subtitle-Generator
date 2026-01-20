@@ -1,8 +1,9 @@
 # 🎬 Subtitle Generator & Translator
 
-A production-ready, offline subtitle generation and translation system with **REST API backend**. Uses **faster-whisper** for high-speed transcription and a **custom-trained Transformer NMT model** for neural machine translation (English → 11 Indic Languages).
+A production-ready, offline subtitle generation and translation system with **REST API backend**. Uses **faster-whisper** for high-speed transcription and **custom-trained Transformer NMT models** for neural machine translation to **11 Indic languages** with **lazy model loading**.
 
----
+**API Version**: 2.0.0 | **NMT Models**: 60.52M params each | **Languages**: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
+
 
 ## ✨ Features
 
@@ -23,15 +24,16 @@ A production-ready, offline subtitle generation and translation system with **RE
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SUBTITLE GENERATOR SYSTEM                           │
+│                         SUBTITLE GENERATOR v2.0                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                      FastAPI Backend (api.py)                       │    │
 │  │                                                                     │    │
-│  │   POST /upload ──► Background Job ──► GET /jobs/{id}                │    │
-│  │   POST /translate ──► Instant Response                              │    │
-│  │   GET /download/{id}/original | translated                          │    │
+│  │   GET  /languages ──► Available target languages                    │    │
+│  │   POST /upload?target_lang=hi ──► Background Job                    │    │
+│  │   POST /translate?target_lang=as ──► Instant Response               │    │
+│  │   GET  /download/{id}/translated ──► SRT/VTT file                   │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                     │                                       │
 │                                     ▼                                       │
@@ -39,15 +41,19 @@ A production-ready, offline subtitle generation and translation system with **RE
 │  │                     Processing Pipeline                             │    │ 
 │  │                                                                     │    │
 │  │  ┌─────────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────┐  │    │
-│  │  │  Video  │───►│ Audio Extract│───►│ Transcribe  │───►│ Subtitles│ │    │
+│  │  │  Video  │───►│ Audio Extract│───►│ Transcribe  │───►│Subtitles│  │    │
 │  │  │  Input  │    │   (FFmpeg)   │    │(faster-whisper)│ │  (SRT)  │  │    │
 │  │  └─────────┘    └──────────────┘    └──────┬──────┘    └─────────┘  │    │
 │  │                                            │                        │    │
 │  │                                            ▼                        │    │
-│  │                                    ┌──────────────┐    ┌─────────┐  │    │
-│  │                                    │  Translate   │───►│Subtitles│  │    │
-│  │                                    │(NMT Transformer)│ │  (Hindi)│  │    │
-│  │                                    └──────────────┘    └─────────┘  │    │
+│  │               ┌────────────────────────────────────────────────┐    │    │
+│  │               │    Multi-Language Translator (Lazy Loading)    │    │    │
+│  │               │                                                │    │    │
+│  │               │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐       │    │    │
+│  │               │  │ as  │ │ bn  │ │ gu  │ │ hi  │ │ ... │       │    │    │
+│  │               │  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘       │    │    │
+│  │               │       (models loaded on-demand)                 │    │    │
+│  │               └────────────────────────────────────────────────┘    │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -59,7 +65,7 @@ A production-ready, offline subtitle generation and translation system with **RE
 
 ```
 Subtitle-Generator/
-├── api.py                      # FastAPI REST backend
+├── api.py                      # FastAPI REST backend (v2.0.0)
 ├── app.py                      # CLI application (3-step pipeline)
 ├── config.py                   # Configuration settings
 ├── requirements.txt            # Dependencies
@@ -67,27 +73,31 @@ Subtitle-Generator/
 ├── src/                        # Core modules
 │   ├── audio_processor.py      # Video → Audio extraction
 │   ├── transcriber.py          # faster-whisper transcription
-│   ├── translator.py           # NMT translation wrapper
+│   ├── translator.py           # Multi-language NMT wrapper (lazy loading)
 │   ├── subtitle_generator.py   # SRT/VTT generation
 │   └── nmt/                    # Neural Machine Translation
 │       ├── model/              # Transformer architecture
 │       ├── training/           # Training pipeline
 │       ├── inference/          # Translation inference
-│       └── evaluation/         # BLEU/METEOR metrics
+│       └── languages.py        # Language definitions
 │
 ├── scripts/                    # CLI tools
+│   ├── train_pipeline.sh      # Full training pipeline
 │   ├── train_nmt.py           # Train translation model
-│   ├── evaluate_nmt.py        # Evaluate model quality
-│   ├── translate.py           # Interactive translation
+│   ├── copy_models.sh         # Copy trained models
 │   └── download_dataset.py    # Download training data
 │
-├── models/translation/         # Trained models
-│   ├── best.pt                # Best checkpoint (60M params)
-│   └── nmt_spm.model          # SentencePiece tokenizer
+├── models/translation/         # Trained models (lazy loaded)
+│   ├── nmt_spm.model          # Shared SentencePiece tokenizer
+│   ├── nmt_spm.vocab          # Vocabulary file
+│   ├── as/best.pt             # Assamese model (60M params)
+│   ├── bn/best.pt             # Bengali model
+│   ├── gu/best.pt             # Gujarati model
+│   ├── hi/best.pt             # Hindi model
+│   └── .../best.pt            # Other language models
 │
+├── tests/                      # Unit tests
 ├── docs/                       # Documentation
-│   └── ARCHITECTURE.md        # Detailed architecture
-│
 ├── data/                       # Training data
 ├── output/                     # Generated subtitles
 └── temp/                       # Temporary files
@@ -142,13 +152,14 @@ Open in browser: **http://localhost:8000/docs**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | API info |
-| `GET` | `/health` | Health check & component status |
+| `GET` | `/health` | Health check & available languages |
+| `GET` | `/languages` | **List supported/available languages** |
 | `GET` | `/docs` | **Swagger UI** (interactive docs) |
-| `POST` | `/upload` | Upload video → Start processing |
+| `POST` | `/upload?target_lang=hi` | Upload video → Start processing |
 | `GET` | `/jobs/{id}` | Check job status & progress |
 | `GET` | `/jobs` | List all jobs |
 | `GET` | `/download/{id}/original` | Download original subtitles |
-| `GET` | `/download/{id}/translated` | Download Hindi subtitles |
+| `GET` | `/download/{id}/translated` | Download translated subtitles |
 | `POST` | `/translate` | Translate single text |
 | `POST` | `/translate/batch` | Translate multiple texts |
 | `DELETE` | `/jobs/{id}` | Delete job & files |
@@ -156,10 +167,17 @@ Open in browser: **http://localhost:8000/docs**
 ### Example: Upload Video
 
 ```bash
+# Upload with Hindi subtitles (default)
 curl -X POST "http://localhost:8000/upload" \
-  -F "file=@your_video.mp4" \
-  -F "translate=true" \
-  -F "format=srt"
+  -F "file=@your_video.mp4"
+
+# Upload with Assamese subtitles
+curl -X POST "http://localhost:8000/upload?translate=true&target_lang=as" \
+  -F "file=@your_video.mp4"
+
+# Upload with Bengali subtitles
+curl -X POST "http://localhost:8000/upload?translate=true&target_lang=bn" \
+  -F "file=@your_video.mp4"
 
 # Response: {"job_id": "abc123", "status_url": "/jobs/abc123"}
 ```
@@ -175,11 +193,18 @@ curl http://localhost:8000/jobs/abc123
 ### Example: Translate Text
 
 ```bash
+# Translate to Hindi (default)
 curl -X POST "http://localhost:8000/translate" \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello world"}'
 
-# Response: {"original": "Hello world", "translated": "हेलो दुनिया"}
+# Translate to Tamil
+curl -X POST "http://localhost:8000/translate" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello world", "target_lang": "ta"}'
+
+# Check available languages
+curl http://localhost:8000/languages
 ```
 
 ---
@@ -210,9 +235,10 @@ Edit `config.py`:
 WHISPER_MODEL_SIZE = "tiny"   # tiny, base, small, medium, large-v3
 WHISPER_DEVICE = "cuda"       # Auto-detected (cuda/cpu)
 
-# Languages
+# Translation (Multi-language)
+# Supported: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
 SOURCE_LANGUAGE = "en"
-TARGET_LANGUAGE = "hi"        # Hindi
+TARGET_LANGUAGE = "hi"        # Default target language
 
 # Subtitle format
 SUBTITLE_FORMAT = "srt"       # srt, vtt
@@ -298,7 +324,9 @@ python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples
 - ✅ **Full Audio Mode**: Single-pass processing
 - ✅ **Batch Translation**: Efficient GPU utilization
 - ✅ **Background Jobs**: Non-blocking API requests
-- ✅ **Lazy Loading**: Models load on first request
+- ✅ **Lazy Loading**: Models load on-demand (memory efficient)
+- ✅ **Shared Tokenizer**: One tokenizer for all 11 languages
+- ✅ **Model Caching**: Loaded models stay in memory
 
 ---
 
@@ -308,9 +336,10 @@ python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples
 |-------|----------|
 | FFmpeg not found | Install FFmpeg and add to PATH |
 | CUDA out of memory | Use smaller Whisper model (`tiny` or `base`) |
-| Translation returns original | Ensure `models/translation/best.pt` exists |
+| Translation returns original | Ensure `models/translation/{lang}/best.pt` exists |
 | Slow transcription | Check `WHISPER_DEVICE` is `cuda` |
 | API port in use | Change port: `uvicorn api:app --port 8001` |
+| Language not available | Check `/languages` endpoint for available models |
 
 ---
 
@@ -340,6 +369,8 @@ python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples
 - [x] Custom NMT model
 - [x] REST API backend
 - [x] Multiple language pairs (11 Indic languages)
+- [x] Multi-language lazy loading (v2.0.0)
+- [x] Per-language model files
 - [ ] Music detection (`[♪ Music ♪]`)
 - [ ] Web UI frontend
 - [ ] Docker deployment

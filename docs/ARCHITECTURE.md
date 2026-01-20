@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Subtitle Generator is a modular, offline subtitle generation and translation system with a REST API backend. It uses a 3-step processing pipeline optimized for speed and accuracy.
+The Subtitle Generator is a modular, offline subtitle generation and translation system with a REST API backend. It supports **11 Indic languages** with **lazy model loading** for memory efficiency. Version 2.0.0 introduces per-language model files.
 
 ---
 
@@ -171,11 +171,30 @@ VIDEO FILE (MP4/AVI/MKV)
 │  Batch processing │
 │  Beam search      │
 └─────────┬─────────┘
-          │ List[{start, end, text(Hindi)}]
+          │ List[{start, end, text(translated)}]
           ▼
 ┌───────────────────┐        ┌───────────────────┐
-│SubtitleGenerator  │───────►│ translated_hi.srt │
+│SubtitleGenerator  │───────►│ video_{lang}.srt  │
 └───────────────────┘        └───────────────────┘
+```
+
+### Model Directory Structure
+
+```
+models/translation/
+├── nmt_spm.model           # Shared tokenizer (all languages)
+├── nmt_spm.vocab           # Vocabulary file
+├── as/best.pt              # Assamese model (60M params)
+├── bn/best.pt              # Bengali model
+├── gu/best.pt              # Gujarati model
+├── hi/best.pt              # Hindi model
+├── kn/best.pt              # Kannada model
+├── ml/best.pt              # Malayalam model
+├── mr/best.pt              # Marathi model
+├── or/best.pt              # Odia model
+├── pa/best.pt              # Punjabi model
+├── ta/best.pt              # Tamil model
+└── te/best.pt              # Telugu model
 ```
 
 ---
@@ -319,6 +338,7 @@ app.py (CLI Application)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/languages` | GET | **List supported/available languages** |
 | `/translate` | POST | Translate single text |
 | `/translate/batch` | POST | Translate multiple texts |
 
@@ -332,9 +352,11 @@ app.py (CLI Application)
 |-----------|-----|------------|
 | faster-whisper (tiny) | ~1 GB | ~1 GB |
 | faster-whisper (large-v3) | ~4 GB | ~10 GB |
-| NMT Transformer | ~300 MB | ~500 MB |
+| NMT Transformer (per model) | ~300 MB | ~500 MB |
+| NMT Tokenizer (shared) | ~5 MB | - |
 | FastAPI Server | ~100 MB | - |
-| **Total (tiny model)** | **~1.5 GB** | **~1.5 GB** |
+| **Total (tiny + 1 NMT)** | **~1.5 GB** | **~1.5 GB** |
+| **Total (tiny + all 11 NMT)** | **~4.3 GB** | **~6.5 GB** |
 
 ### Processing Speed (2-hour video)
 
@@ -361,13 +383,14 @@ app.py (CLI Application)
 
 1. **FastAPI over Flask**: Native async support, automatic OpenAPI docs, Pydantic validation
 2. **Background Tasks**: Video processing runs async, non-blocking for API
-3. **Lazy Loading**: Models load on first request, faster server startup
-4. **Full Audio Mode**: Process entire audio in one pass, eliminates segmentation overhead
-5. **faster-whisper**: CTranslate2-optimized Whisper for 3-4x speedup
-6. **Streaming Transcription**: Generator-based output for memory efficiency
-7. **Batch Translation**: Process all subtitles together for GPU efficiency
-8. **Graceful Degradation**: System works without NMT model (returns original text)
-9. **Auto Device Detection**: Automatically uses CUDA if available
+3. **Lazy Model Loading**: NMT models load on-demand, reducing startup memory
+4. **Shared Tokenizer**: One tokenizer for all 11 languages
+5. **Per-Language Models**: Each language has own checkpoint for flexibility
+6. **Full Audio Mode**: Process entire audio in one pass, eliminates segmentation overhead
+7. **faster-whisper**: CTranslate2-optimized Whisper for 3-4x speedup
+8. **Batch Translation**: Process all subtitles together for GPU efficiency
+9. **Graceful Degradation**: System works without NMT model (returns original text)
+10. **Auto Device Detection**: Automatically uses CUDA if available
 
 ---
 

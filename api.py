@@ -13,7 +13,7 @@ import uuid
 import asyncio
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException, Query
@@ -35,21 +35,31 @@ from src.subtitle_generator import SubtitleGenerator
 # ============================================
 
 app = FastAPI(
-    title="Subtitle Generator API",
+    title="Subtitle Generator & Translator API",
     description="""
-    🎬 **Subtitle Generator & Translator API**
+    🎬 **Multi-Language Subtitle Generator API**
     
-    Generate subtitles from video files and translate them to Hindi using 
-    a custom-trained Neural Machine Translation model.
+    Generate subtitles from video files and translate them to **10+ Indic languages** using 
+    custom-trained Neural Machine Translation models.
     
     ## Features
-    - Upload video files (MP4, AVI, MKV, etc.)
-    - Automatic speech-to-text transcription
-    - Neural machine translation (English → Hindi)
-    - Download SRT/VTT subtitle files
-    - Background processing for long videos
+    - 🎥 Upload video files (MP4, AVI, MKV, MOV, WebM)
+    - 🎤 Automatic speech-to-text transcription (Whisper)
+    - 🌐 Neural machine translation to **Indic languages**:
+      - Assamese (as), Bengali (bn), Gujarati (gu), Hindi (hi)
+      - Kannada (kn), Malayalam (ml), Marathi (mr), Odia (or)
+      - Punjabi (pa), Tamil (ta), Telugu (te)
+    - 📄 Download SRT/VTT subtitle files
+    - ⚡ Background processing for long videos
+    - 🔄 Lazy model loading (memory efficient)
+    
+    ## Quick Start
+    1. Check `/languages` to see available translation languages
+    2. Upload video with `/upload?translate=true&target_lang=hi`
+    3. Poll `/jobs/{job_id}` for status
+    4. Download subtitles with `/download/{job_id}/translated`
     """,
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -106,7 +116,8 @@ class HealthResponse(BaseModel):
     whisper_model: str
     whisper_device: str
     nmt_available: bool
-    target_language: str
+    available_languages: List[str]
+    loaded_languages: List[str]
 
 # ============================================
 # Initialize Components (Lazy Loading)
@@ -145,7 +156,7 @@ def get_subtitle_generator() -> SubtitleGenerator:
 # Background Tasks
 # ============================================
 
-async def process_video_task(job_id: str, video_path: str, translate: bool, format: str):
+async def process_video_task(job_id: str, video_path: str, translate: bool, target_lang: str, format: str):
     """Background task to process video and generate subtitles."""
     try:
         jobs[job_id]["status"] = JobStatus.PROCESSING
@@ -183,16 +194,20 @@ async def process_video_task(job_id: str, video_path: str, translate: bool, form
         jobs[job_id]["progress"] = 0.8
         
         # Step 4: Translate if requested
-        if translate and translator.is_available():
-            jobs[job_id]["message"] = "Translating to Hindi..."
+        if translate and translator.is_available(target_lang):
+            from src.nmt.languages import get_language_name
+            lang_name = get_language_name(target_lang)
+            jobs[job_id]["message"] = f"Translating to {lang_name}..."
             translated_transcriptions = await asyncio.to_thread(
                 translator.translate_subtitles,
-                transcriptions
+                transcriptions,
+                "en",
+                target_lang
             )
             
             translated_path = subtitle_generator.generate_subtitles(
                 translated_transcriptions,
-                f"{video_name}_{config.TARGET_LANGUAGE}",
+                f"{video_name}_{target_lang}",
                 format=format
             )
             jobs[job_id]["translated_subtitles"] = str(translated_path)
@@ -236,14 +251,16 @@ async def health_check():
         whisper_model=config.WHISPER_MODEL_SIZE,
         whisper_device=config.WHISPER_DEVICE,
         nmt_available=translator.is_available(),
-        target_language=config.TARGET_LANGUAGE
+        available_languages=translator.get_available_languages(),
+        loaded_languages=translator.get_loaded_languages()
     )
 
 @app.post("/upload", tags=["Subtitles"])
 async def upload_video(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    translate: bool = Query(True, description="Translate subtitles to Hindi"),
+    translate: bool = Query(True, description="Translate subtitles"),
+    target_lang: str = Query("hi", description="Target language code (as, bn, gu, hi, kn, ml, mr, or, pa, ta, te)"),
     format: SubtitleFormat = Query(SubtitleFormat.SRT, description="Subtitle format")
 ):
     """
@@ -252,7 +269,9 @@ async def upload_video(
     Returns a job ID that can be used to check processing status.
     
     - **file**: Video file (MP4, AVI, MKV, MOV, WebM)
-    - **translate**: Whether to translate subtitles to Hindi
+    - **translate**: Whether to translate subtitles
+    - **target_lang**: Target language code (default: hi for Hindi)
+      - Available: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
     - **format**: Output format (srt or vtt)
     """
     # Validate file type
@@ -297,6 +316,7 @@ async def upload_video(
         job_id,
         str(video_path),
         translate,
+        target_lang,
         format.value
     )
     
@@ -369,6 +389,32 @@ async def download_subtitles(
         media_type="text/plain"
     )
 
+@app.get("/languages", tags=["Translation"])
+async def get_languages():
+    """
+    Get available translation languages.
+    
+    Returns:
+    - **supported**: All languages the system can potentially translate to
+    - **available**: Languages with trained models currently available
+    - **loaded**: Languages currently loaded in memory
+    """
+    translator = get_translator()
+    
+    from src.nmt.languages import SUPPORTED_LANGUAGES, get_language_name
+    
+    return {
+        "supported": [
+            {"code": code, "name": get_language_name(code)}
+            for code in translator.get_supported_languages()
+        ],
+        "available": [
+            {"code": code, "name": get_language_name(code)}
+            for code in translator.get_available_languages()
+        ],
+        "loaded": translator.get_loaded_languages()
+    }
+
 @app.post("/translate", response_model=TranslateResponse, tags=["Translation"])
 async def translate_text(request: TranslateRequest):
     """
@@ -380,11 +426,18 @@ async def translate_text(request: TranslateRequest):
     """
     translator = get_translator()
     
-    if not translator.is_available():
-        raise HTTPException(
-            status_code=503,
-            detail="Translation model not available"
-        )
+    if not translator.is_available(request.target_lang):
+        available = translator.get_available_languages()
+        if available:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No model for '{request.target_lang}'. Available: {', '.join(available)}"
+            )
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail="No translation models available. Copy models with: bash scripts/copy_models.sh"
+            )
     
     translated = await asyncio.to_thread(
         translator.translate,
@@ -411,11 +464,18 @@ async def translate_batch(
     """
     translator = get_translator()
     
-    if not translator.is_available():
-        raise HTTPException(
-            status_code=503,
-            detail="Translation model not available"
-        )
+    if not translator.is_available(target_lang):
+        available = translator.get_available_languages()
+        if available:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No model for '{target_lang}'. Available: {', '.join(available)}"
+            )
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail="No translation models available. Copy models with: bash scripts/copy_models.sh"
+            )
     
     translated = await asyncio.to_thread(
         translator.translate_batch,

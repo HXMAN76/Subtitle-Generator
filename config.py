@@ -26,11 +26,11 @@ VAD_MIN_SILENCE_DURATION_MS = 100
 AUDIO_FORMAT = "mp3"
 AUDIO_BITRATE = "192k"
 
-# Translation settings
-TRANSLATION_MODEL_PATH = MODELS_DIR / "translation" / "model.pt"
-TRANSLATION_VOCAB_PATH = MODELS_DIR / "translation" / "vocab.json"
+# Translation settings (Multi-language NMT)
+# Supported: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
+TRANSLATION_MODEL_DIR = MODELS_DIR / "translation"
 SOURCE_LANGUAGE = "en"
-TARGET_LANGUAGE = "hi"  # Hindi - matches trained NMT model
+TARGET_LANGUAGE = "hi"  # Default: Hindi (change as needed)
 
 # Subtitle settings
 SUBTITLE_FORMAT = "srt"  # Options: srt, vtt

@@ -62,10 +62,16 @@ output/
 # ============================================
 # Model Files (Large)
 # ============================================
-models/translation/*.pt
-models/translation/*.pth
+models/translation/**/*.pt
+models/translation/**/*.pth
+models/translation/*.model
+models/translation/*.vocab
 models/whisper/
 !models/translation/.gitkeep
+!models/translation/*/.gitkeep
+
+# Training logs (can be large)
+models/translation/**/training_log.jsonl
 
 # ============================================
 # Training Data (Can be large)
@@ -117,6 +123,16 @@ coverage.xml
 # ============================================
 *.log
 logs/
+training_log.jsonl
+
+# ============================================
+# Jupyter / ML
+# ============================================
+*.ipynb_checkpoints/
+.ipynb_checkpoints/
+*.h5
+runs/
+wandb/
 
 # ============================================
 # Keep Directory Structure
