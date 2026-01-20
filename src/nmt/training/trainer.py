@@ -161,9 +161,12 @@ class Trainer:
             total_steps=total_steps
         )
         
-        # Mixed precision scaler
+        # Mixed precision scaler with conservative initialization
         self.use_amp = train_cfg.use_amp and torch.cuda.is_available()
-        self.scaler = GradScaler() if self.use_amp else None
+        self.scaler = GradScaler(
+            init_scale=2**12,      # Start with 4096 instead of default 2**16
+            growth_interval=2000   # Wait 2000 steps between scale increases
+        ) if self.use_amp else None
         
         # Training state
         self.global_step = 0
@@ -243,31 +246,59 @@ class Trainer:
                     self.max_grad_norm
                 )
                 
-                # Optimizer step
+                # Check for Inf/NaN gradients (common with AMP)
+                is_finite = torch.isfinite(grad_norm)
+                
+                # Warn about gradient issues
+                if not is_finite:
+                    print(f"\n⚠️  Warning: Infinite gradient norm at step {self.global_step}, scale={self.scaler.get_scale() if self.use_amp else 'N/A'}")
+                
+                # Optimizer step - only if gradients are valid
                 if self.use_amp:
+                    # scaler.step() internally checks for Inf and skips if needed
+                    old_scale = self.scaler.get_scale()
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
+                    new_scale = self.scaler.get_scale()
+                    
+                    # Only step scheduler if optimizer actually updated
+                    # (scale decrease indicates skipped step due to Inf grads)
+                    did_step = new_scale >= old_scale and is_finite
+                    if did_step:
+                        self.scheduler.step()
+                    elif new_scale < old_scale:
+                        print(f"ℹ️  Skipped optimizer step due to gradient overflow (scale: {old_scale:.0f} → {new_scale:.0f})")
                 else:
                     self.optimizer.step()
+                    self.scheduler.step()
+                    did_step = True  # Non-AMP always completes the step
                 
-                self.scheduler.step()
                 self.optimizer.zero_grad()
+                
+                # Atomic step guard: skip metrics/validation if step was skipped
+                if self.use_amp and not did_step:
+                    continue
+                
                 self.global_step += 1
                 
                 # Update progress bar
                 current_lr = self.scheduler.get_last_lr()[0]
+                grad_norm_value = grad_norm if isinstance(grad_norm, float) else grad_norm.item()
+                grad_display = f"{grad_norm_value:.2f}" if is_finite else "inf"
+                
                 progress_bar.set_postfix({
                     'loss': f"{epoch_loss / num_batches:.4f}",
                     'lr': f"{current_lr:.2e}",
-                    'grad': f"{grad_norm:.2f}"
+                    'grad': grad_display
                 })
                 
-                # Track metrics
-                self.metrics_tracker.update(
-                    loss=epoch_loss / num_batches,
-                    learning_rate=current_lr,
-                    grad_norm=grad_norm if isinstance(grad_norm, float) else grad_norm.item()
-                )
+                # Track metrics (only if gradients are valid)
+                if is_finite:
+                    self.metrics_tracker.update(
+                        loss=epoch_loss / num_batches,
+                        learning_rate=current_lr,
+                        grad_norm=grad_norm_value
+                    )
                 
                 # Periodic validation
                 if self.val_dataloader and self.global_step % self.validate_every_n_steps == 0:
