@@ -382,7 +382,15 @@ def main():
     
     # Load tokenizer
     print(f"\nLoading tokenizer from {args.tokenizer}")
-    tokenizer = Tokenizer(model_path=args.tokenizer)
+    
+    # Get all language tags for multi-language support
+    from src.nmt.languages import get_all_language_tags
+    all_lang_tags = get_all_language_tags()
+    
+    tokenizer = Tokenizer(
+        model_path=args.tokenizer,
+        language_tags=all_lang_tags
+    )
     
     if args.all_languages:
         # Multi-language evaluation
