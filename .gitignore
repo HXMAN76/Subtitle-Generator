@@ -51,9 +51,7 @@ temp/
 *.tmp
 *.temp
 *.cache
-train_nmt.sh
-train_all_langs.sh
-backups/*
+
 # ============================================
 # Output Files
 # ============================================
@@ -183,3 +181,4 @@ checkpoints/
 !examples/.gitkeep
 !results/.gitkeep
 !tests/
+

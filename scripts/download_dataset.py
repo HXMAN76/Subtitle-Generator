@@ -273,7 +273,8 @@ def create_validation_split(
     with open(train_path, "w", encoding="utf-8") as f:
         f.writelines(train_lines)
     
-    print(f"✅ Created {val_path.name} ({val_size} samples)")
+    print(f"✅ Created {val_path.name} ({val_size} samples)"ource /dist_home/nooglers/nooglers/Roshan/new/bin/activate
+          
     print(f"   Training samples remaining: {len(train_lines):,}")
     
     return True
