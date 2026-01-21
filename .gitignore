@@ -59,6 +59,10 @@ output/
 *.srt
 *.vtt
 
+# Evaluation results
+results/
+!results/.gitkeep
+
 # ============================================
 # Model Files (Large)
 # ============================================
@@ -132,9 +136,13 @@ training_log.jsonl
 # ============================================
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
+notebooks/**/*.ipynb
+!notebooks/*.ipynb
 *.h5
 runs/
 wandb/
+checkpoints/
+*.ckpt
 
 # ============================================
 # Keep Directory Structure
@@ -145,4 +153,5 @@ wandb/
 !output/.gitkeep
 !temp/.gitkeep
 !examples/.gitkeep
+!results/.gitkeep
 !tests/
