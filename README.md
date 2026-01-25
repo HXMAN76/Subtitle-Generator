@@ -1,22 +1,23 @@
 # 🎬 Subtitle Generator & Translator
 
-A production-ready, offline subtitle generation and translation system with **REST API backend**. Uses **faster-whisper** for high-speed transcription and **custom-trained Transformer NMT models** for neural machine translation to **11 Indic languages** with **lazy model loading**.
+A production-ready, offline subtitle generation and translation system with **REST API backend**. Uses **faster-whisper** for high-speed transcription and **custom-trained XLarge Transformer NMT models** for neural machine translation to **11 Indic languages** with **per-language tokenizers** and **lazy model loading**.
 
-**API Version**: 2.0.0 | **NMT Models**: 60.52M params each | **Languages**: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
+**API Version**: 2.1.0 | **NMT Models**: XLarge (~385M params) | **Languages**: as, bn, gu, hi, kn, ml, mr, or, pa, ta, te
 
+> ⚠️ **Training Status**: XLarge models are currently being trained. Results pending.
 
 ## ✨ Features
 
 | Feature | Description |
 |---------|-------------|
 | 🎙️ **Speech-to-Text** | High-speed transcription using faster-whisper (3-4x faster than OpenAI Whisper) |
-| 🌐 **Neural Translation** | Custom-trained 60M parameter Transformer for 11 Indic languages |
-| 🇮🇳 **Multi-Language** | Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese |
+| 🌐 **XLarge NMT** | Custom-trained 385M parameter Transformer for state-of-the-art translation |
+| 🇮🇳 **11 Indic Languages** | Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese |
+| 🔤 **Per-Language Tokenizers** | Optimized tokenizer for each language (48K vocab for Dravidian) |
 | 🌐 **REST API** | FastAPI backend with Swagger docs, background jobs, file uploads |
 | 📝 **Subtitle Generation** | SRT and VTT format output |
 | 🔌 **Offline Operation** | Runs completely locally - no cloud APIs needed |
-| ⚡ **Full Audio Mode** | Processes entire audio in one pass for maximum speed |
-| 🎯 **Auto GPU/CPU** | Automatically uses CUDA if available, falls back to CPU |
+| ⚡ **H100 Optimized** | Training optimized for H100/A100, inference on RTX 6000 Ada |
 
 ---
 
@@ -65,7 +66,7 @@ A production-ready, offline subtitle generation and translation system with **RE
 
 ```
 Subtitle-Generator/
-├── api.py                      # FastAPI REST backend (v2.0.0)
+├── api.py                      # FastAPI REST backend
 ├── app.py                      # CLI application (3-step pipeline)
 ├── config.py                   # Configuration settings
 ├── requirements.txt            # Dependencies
@@ -79,28 +80,28 @@ Subtitle-Generator/
 │       ├── model/              # Transformer architecture
 │       ├── training/           # Training pipeline
 │       ├── inference/          # Translation inference
+│       ├── config.py           # Model configs (base/large/xlarge)
 │       └── languages.py        # Language definitions
 │
 ├── scripts/                    # CLI tools
-│   ├── train_pipeline.sh      # Full training pipeline
+│   ├── train_tokenizer.py     # Train per-language tokenizers
 │   ├── train_nmt.py           # Train translation model
-│   ├── copy_models.sh         # Copy trained models
-│   └── download_dataset.py    # Download training data
+│   ├── train_pipeline.sh      # Full training pipeline
+│   └── evaluate_nmt.py        # Evaluate model BLEU scores
 │
 ├── models/translation/         # Trained models (lazy loaded)
-│   ├── nmt_spm.model          # Shared SentencePiece tokenizer
-│   ├── nmt_spm.vocab          # Vocabulary file
-│   ├── as/best.pt             # Assamese model (60M params)
-│   ├── bn/best.pt             # Bengali model
-│   ├── gu/best.pt             # Gujarati model
-│   ├── hi/best.pt             # Hindi model
-│   └── .../best.pt            # Other language models
+│   ├── hi/                     # Hindi model
+│   │   ├── tokenizer.model     # Per-language tokenizer (32K vocab)
+│   │   └── best.pt             # XLarge model (~385M params)
+│   ├── ta/                     # Tamil model  
+│   │   ├── tokenizer.model     # Per-language tokenizer (48K vocab, Dravidian)
+│   │   └── best.pt
+│   └── .../                    # Other language models
 │
 ├── tests/                      # Unit tests
 ├── docs/                       # Documentation
 ├── data/                       # Training data
-├── output/                     # Generated subtitles
-└── temp/                       # Temporary files
+└── output/                     # Generated subtitles
 ```
 
 ---
@@ -258,51 +259,50 @@ SUBTITLE_FORMAT = "srt"       # srt, vtt
 
 ## 🧠 Translation Model
 
+### Architecture: XLarge Transformer
+
+> ⚠️ **Training Status**: Models are currently being trained. BLEU scores pending.
+
+| Parameter | Value |
+|-----------|-------|
+| **Type** | Transformer (Encoder-Decoder) |
+| **Parameters** | ~385 Million |
+| **Encoder Layers** | 12 |
+| **Decoder Layers** | 12 |
+| **Attention Heads** | 16 |
+| **Hidden Dimension** | 1024 |
+| **Feed-Forward** | 4096 |
+| **Tokenizer** | Per-language SentencePiece |
+| **Vocab Size** | 32K (Indo-Aryan) / 48K (Dravidian) |
+| **Dataset** | AI4Bharat Samanantar (49.6M pairs) |
+
 ### Supported Languages
 
-| Code | Language | Dataset Size |
-|------|----------|-------------|
-| `hi` | Hindi | 8.6M pairs |
-| `ta` | Tamil | 5.3M pairs |
-| `te` | Telugu | 4.8M pairs |
-| `bn` | Bengali | 8.5M pairs |
-| `mr` | Marathi | 3.6M pairs |
-| `gu` | Gujarati | 3.1M pairs |
-| `kn` | Kannada | 4.0M pairs |
-| `ml` | Malayalam | 5.8M pairs |
-| `pa` | Punjabi | 2.4M pairs |
-| `or` | Odia | 1.0M pairs |
-| `as` | Assamese | 140K pairs |
-
-### Architecture
-
-- **Type**: Transformer (Encoder-Decoder)
-- **Parameters**: 60.52 Million
-- **Layers**: 6 encoder + 6 decoder
-- **Attention Heads**: 8
-- **Hidden Dim**: 512
-- **Tokenizer**: SentencePiece (32K vocab)
-- **Dataset**: AI4Bharat Samanantar (49.6M pairs)
+| Code | Language | Family | Tokenizer Vocab |
+|------|----------|--------|----------------|
+| `hi` | Hindi | Indo-Aryan | 32K BPE |
+| `bn` | Bengali | Indo-Aryan | 32K BPE |
+| `mr` | Marathi | Indo-Aryan | 32K BPE |
+| `gu` | Gujarati | Indo-Aryan | 32K BPE |
+| `pa` | Punjabi | Indo-Aryan | 32K BPE |
+| `or` | Odia | Indo-Aryan | 32K BPE |
+| `as` | Assamese | Indo-Aryan | 32K BPE |
+| `ta` | Tamil | **Dravidian** | **48K Unigram** |
+| `te` | Telugu | **Dravidian** | **48K Unigram** |
+| `kn` | Kannada | **Dravidian** | **48K Unigram** |
+| `ml` | Malayalam | **Dravidian** | **48K Unigram** |
 
 ### Train Your Own Model
 
 ```bash
-# Download dataset for a specific language
-python scripts/download_dataset.py --lang hi    # Hindi
-python scripts/download_dataset.py --lang ta    # Tamil
-python scripts/download_dataset.py --all-langs  # All languages
+# 1. Train per-language tokenizer (optimized for each language)
+python scripts/train_tokenizer.py --target-lang ta
 
-# Create combined tokenizer corpus
-python scripts/download_dataset.py --lang hi ta te --create-corpus
+# 2. Train XLarge model (~385M params)
+python scripts/train_nmt.py --target-lang ta --config xlarge --streaming
 
-# Train model for Hindi
-python scripts/train_nmt.py --target-lang hi --streaming
-
-# Train for Tamil with small config
-python scripts/train_nmt.py --target-lang ta --config small
-
-# Evaluate
-python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples 10
+# 3. Evaluate
+python scripts/evaluate_nmt.py --language ta
 ```
 
 ---
@@ -321,11 +321,11 @@ python scripts/evaluate_nmt.py --checkpoint models/translation/best.pt --samples
 ### Optimizations Applied
 
 - ✅ **faster-whisper**: 3-4x faster than OpenAI Whisper
-- ✅ **Full Audio Mode**: Single-pass processing
 - ✅ **Batch Translation**: Efficient GPU utilization
 - ✅ **Background Jobs**: Non-blocking API requests
 - ✅ **Lazy Loading**: Models load on-demand (memory efficient)
-- ✅ **Shared Tokenizer**: One tokenizer for all 11 languages
+- ✅ **Per-Language Tokenizers**: Optimized vocabulary per language
+- ✅ **XLarge Architecture**: 385M params for maximum quality
 - ✅ **Model Caching**: Loaded models stay in memory
 
 ---

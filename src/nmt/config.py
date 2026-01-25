@@ -114,6 +114,7 @@ class TokenizerConfig:
     """SentencePiece tokenizer configuration.
     
     Supports all 11 Indic languages from Samanantar dataset.
+    Enhanced settings for Dravidian scripts (Kannada, Malayalam, Tamil, Telugu).
     """
     
     vocab_size: int = 32000
@@ -131,6 +132,36 @@ class TokenizerConfig:
     
     # Paths
     model_prefix: str = "models/translation/nmt_spm"
+    corpus_path: str = "data/raw/spm_corpus_multilang.txt"
+
+
+@dataclass
+class TokenizerConfigEnhanced:
+    """Enhanced tokenizer configuration for better Dravidian language support.
+    
+    Key improvements over base config:
+    - Larger vocabulary (48K) for better coverage of complex scripts
+    - Higher character coverage (0.9999) to minimize UNK tokens
+    - Unigram model type for better handling of agglutinative languages
+    
+    Use this for retraining when Dravidian BLEU scores are low.
+    """
+    
+    vocab_size: int = 48000      # Larger vocab for multilingual coverage
+    model_type: str = "unigram"  # Better for agglutinative Dravidian languages
+    character_coverage: float = 0.9999  # Near-complete coverage
+    
+    # Special tokens
+    pad_token: str = "<pad>"
+    unk_token: str = "<unk>"
+    bos_token: str = "<bos>"
+    eos_token: str = "<eos>"
+    
+    # Language tags for multilingual support (en + 11 Indic languages)
+    language_tags: List[str] = field(default_factory=get_all_language_tags)
+    
+    # Paths (different prefix to avoid overwriting base tokenizer)
+    model_prefix: str = "models/translation/nmt_spm_enhanced"
     corpus_path: str = "data/raw/spm_corpus_multilang.txt"
 
 
@@ -201,6 +232,51 @@ def get_small_config() -> NMTConfig:
     config.model.dropout = 0.2
     config.training.batch_size = 64
     config.training.warmup_steps = 2000
+    return config
+
+
+def get_large_config() -> NMTConfig:
+    """Large configuration for enhanced quality (~150M parameters).
+    
+    Recommended for production use with adequate GPU resources.
+    Requires ~12GB VRAM (RTX 3080/4080 or better).
+    """
+    config = NMTConfig()
+    config.model.d_model = 768
+    config.model.n_heads = 12
+    config.model.d_ff = 3072
+    config.model.n_encoder_layers = 8
+    config.model.n_decoder_layers = 8
+    config.model.dropout = 0.1
+    config.model.max_seq_len = 256
+    config.training.batch_size = 16  # Reduced due to larger model
+    config.training.gradient_accumulation_steps = 4  # Effective batch = 64
+    config.training.warmup_steps = 6000
+    config.training.max_epochs = 25
+    return config
+
+
+def get_xlarge_config() -> NMTConfig:
+    """XLarge configuration for maximum quality (~300M parameters).
+    
+    State-of-the-art quality for production deployment.
+    Requires ~24GB VRAM (RTX 3090/4090, A100, or H100).
+    
+    Optimized for training on H100 via SLURM.
+    """
+    config = NMTConfig()
+    config.model.d_model = 1024
+    config.model.n_heads = 16
+    config.model.d_ff = 4096
+    config.model.n_encoder_layers = 12
+    config.model.n_decoder_layers = 12
+    config.model.dropout = 0.1
+    config.model.max_seq_len = 256
+    config.training.batch_size = 8  # Small batch for large model
+    config.training.gradient_accumulation_steps = 8  # Effective batch = 64
+    config.training.warmup_steps = 8000
+    config.training.learning_rate = 7e-5  # Lower LR for stability
+    config.training.max_epochs = 20
     return config
 
 

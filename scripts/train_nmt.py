@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import torch
 
-from src.nmt.config import NMTConfig, get_base_config, get_small_config, get_debug_config
+from src.nmt.config import NMTConfig, get_base_config, get_small_config, get_large_config, get_xlarge_config, get_debug_config
 from src.nmt.tokenizer import Tokenizer, train_nmt_tokenizer
 from src.nmt.model.transformer import Transformer, create_model_from_config
 from src.nmt.training.dataset import (
@@ -67,8 +67,8 @@ Supported target languages:
     
     # Config
     parser.add_argument("--config", type=str, default="base",
-                       choices=["base", "small", "debug"],
-                       help="Model configuration preset")
+                       choices=["base", "small", "large", "xlarge", "debug"],
+                       help="Model configuration preset (xlarge: ~300M params for H100)")
     
     # Data paths (defaults are set dynamically based on target-lang)
     parser.add_argument("--train-data", type=str, default=None,
@@ -145,6 +145,10 @@ def main():
         config = get_base_config()
     elif args.config == "small":
         config = get_small_config()
+    elif args.config == "large":
+        config = get_large_config()
+    elif args.config == "xlarge":
+        config = get_xlarge_config()
     else:
         config = get_debug_config()
     
@@ -173,22 +177,40 @@ def main():
     
     # Train or load tokenizer
     print("\n--- Tokenizer ---")
-    tokenizer_path = Path(args.tokenizer)
     
-    if args.train_tokenizer or not tokenizer_path.exists():
-        print("Training new tokenizer...")
+    # Per-language tokenizer path (preferred)
+    per_lang_tokenizer_path = config.model_dir / "tokenizer.model"
+    # Shared tokenizer path (fallback)
+    shared_tokenizer_path = Path(args.tokenizer)
+    
+    if args.train_tokenizer:
+        # Train new per-language tokenizer
+        print(f"Training new per-language tokenizer for {args.target_lang}...")
+        language_tags = ["<en>", f"<{args.target_lang}>"]
         tokenizer = train_nmt_tokenizer(
             corpus_path=args.corpus,
-            output_prefix=str(tokenizer_path).replace('.model', ''),
+            output_prefix=str(config.model_dir / "tokenizer"),
             vocab_size=config.tokenizer.vocab_size,
+            language_tags=language_tags
+        )
+    elif per_lang_tokenizer_path.exists():
+        # Load per-language tokenizer
+        print(f"Loading per-language tokenizer from {per_lang_tokenizer_path}")
+        tokenizer = Tokenizer(
+            model_path=str(per_lang_tokenizer_path),
+            language_tags=["<en>", f"<{args.target_lang}>"]
+        )
+    elif shared_tokenizer_path.exists():
+        # Fallback to shared tokenizer
+        print(f"Loading shared tokenizer from {shared_tokenizer_path}")
+        tokenizer = Tokenizer(
+            model_path=str(shared_tokenizer_path),
             language_tags=config.tokenizer.language_tags
         )
     else:
-        print(f"Loading tokenizer from {tokenizer_path}")
-        tokenizer = Tokenizer(
-            model_path=str(tokenizer_path),
-            language_tags=config.tokenizer.language_tags
-        )
+        print(f"No tokenizer found! Train one first with:")
+        print(f"  python scripts/train_tokenizer.py --target-lang {args.target_lang}")
+        return
     
     # Update config with tokenizer info
     config.model.vocab_size = tokenizer.vocab_size

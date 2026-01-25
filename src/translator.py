@@ -32,17 +32,25 @@ class Translator:
     Features:
     - Lazy loading: Models are loaded on-demand when first used
     - Multi-language: Supports all trained Indic language models
-    - Shared tokenizer: One tokenizer for all language models
+    - Per-language tokenizers: Each model has its own optimized tokenizer
     
     Directory structure expected:
         models/translation/
-        ├── nmt_spm.model       # Shared tokenizer
-        ├── as/best.pt          # Assamese model
-        ├── bn/best.pt          # Bengali model
-        └── ...                 # Other language models
+        ├── as/                     # Assamese model
+        │   ├── best.pt             # Model checkpoint
+        │   └── tokenizer.model     # Language-specific tokenizer
+        ├── bn/                     # Bengali model
+        │   ├── best.pt
+        │   └── tokenizer.model
+        └── ...                     # Other language models
+    
+    Fallback (legacy shared tokenizer):
+        models/translation/
+        ├── nmt_spm.model           # Shared tokenizer (if per-lang not found)
+        └── ...
     
     Args:
-        model_dir: Directory containing tokenizer and language model folders.
+        model_dir: Directory containing language model folders.
         device: Device for inference ('cuda', 'cpu', or None for auto).
         beam_size: Beam size for decoding (0 for greedy).
     """
@@ -62,41 +70,76 @@ class Translator:
         else:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Shared tokenizer (loaded once)
-        self.tokenizer = None
-        self._tokenizer_loaded = False
+        # Fallback shared tokenizer (for legacy compatibility)
+        self._shared_tokenizer = None
+        self._shared_tokenizer_loaded = False
         
-        # Per-language model cache {lang_code: NMTTranslator}
-        self._models: Dict[str, 'NMTTranslator'] = {}
+        # Per-language model cache {lang_code: (model, tokenizer)}
+        self._models: Dict[str, tuple] = {}
         
         # Track available languages
         self._available_languages: Optional[List[str]] = None
         
-        # Load tokenizer on init
-        self._load_tokenizer()
+        # Try to load shared tokenizer as fallback
+        self._load_shared_tokenizer()
     
-    def _load_tokenizer(self):
-        """Load the shared tokenizer."""
+    def _load_shared_tokenizer(self):
+        """Load the shared tokenizer (fallback for legacy models)."""
         tokenizer_path = self.model_dir / "nmt_spm.model"
         
         if not tokenizer_path.exists():
-            print(f"[Translator] No tokenizer found at {tokenizer_path}")
-            print("[Translator] Translation will not be available.")
+            # No shared tokenizer - that's fine, we use per-language ones
             return
         
         try:
             from src.nmt.tokenizer import Tokenizer
             
-            self.tokenizer = Tokenizer(
+            self._shared_tokenizer = Tokenizer(
                 model_path=str(tokenizer_path),
                 language_tags=get_all_language_tags()
             )
-            self._tokenizer_loaded = True
-            print(f"[Translator] Tokenizer loaded (vocab_size={self.tokenizer.vocab_size})")
+            self._shared_tokenizer_loaded = True
+            print(f"[Translator] Shared tokenizer loaded (fallback, vocab_size={self._shared_tokenizer.vocab_size})")
             
         except Exception as e:
-            print(f"[Translator] Failed to load tokenizer: {e}")
-            self._tokenizer_loaded = False
+            print(f"[Translator] Failed to load shared tokenizer: {e}")
+            self._shared_tokenizer_loaded = False
+    
+    def _load_language_tokenizer(self, target_lang: str):
+        """Load tokenizer for a specific language.
+        
+        Looks for tokenizer in this order:
+        1. models/translation/{lang}/tokenizer.model (per-language)
+        2. models/translation/nmt_spm.model (shared fallback)
+        
+        Args:
+            target_lang: Target language code (e.g., 'hi', 'ta').
+            
+        Returns:
+            Tokenizer instance, or None if unavailable.
+        """
+        from src.nmt.tokenizer import Tokenizer
+        
+        # Try per-language tokenizer first
+        per_lang_path = self.model_dir / target_lang / "tokenizer.model"
+        if per_lang_path.exists():
+            try:
+                tokenizer = Tokenizer(
+                    model_path=str(per_lang_path),
+                    language_tags=["<en>", f"<{target_lang}>"]  # Only source and target
+                )
+                print(f"[Translator] Per-language tokenizer loaded for {target_lang} (vocab_size={tokenizer.vocab_size})")
+                return tokenizer
+            except Exception as e:
+                print(f"[Translator] Failed to load per-language tokenizer for {target_lang}: {e}")
+        
+        # Fallback to shared tokenizer
+        if self._shared_tokenizer is not None:
+            print(f"[Translator] Using shared tokenizer for {target_lang}")
+            return self._shared_tokenizer
+        
+        print(f"[Translator] No tokenizer available for {target_lang}")
+        return None
     
     def _load_model(self, target_lang: str) -> Optional['NMTTranslator']:
         """Load model for specific language (lazy loading).
@@ -111,15 +154,16 @@ class Translator:
         if target_lang in self._models:
             return self._models[target_lang]
         
-        # Check if tokenizer is available
-        if not self._tokenizer_loaded or self.tokenizer is None:
-            print(f"[Translator] Cannot load model - tokenizer not available")
-            return None
-        
         # Check if model exists
         checkpoint_path = self.model_dir / target_lang / "best.pt"
         if not checkpoint_path.exists():
             print(f"[Translator] No model found for '{target_lang}' at {checkpoint_path}")
+            return None
+        
+        # Load tokenizer for this language
+        tokenizer = self._load_language_tokenizer(target_lang)
+        if tokenizer is None:
+            print(f"[Translator] Cannot load model - no tokenizer available for {target_lang}")
             return None
         
         try:
@@ -133,7 +177,7 @@ class Translator:
             
             # Get config and ensure vocab_size matches tokenizer
             config = checkpoint.get('config', {})
-            config['vocab_size'] = self.tokenizer.vocab_size
+            config['vocab_size'] = tokenizer.vocab_size
             
             # Create and load model
             model = Transformer.from_config(config)
@@ -144,7 +188,7 @@ class Translator:
             # Create translator
             translator = NMTTranslator(
                 model=model,
-                tokenizer=self.tokenizer,
+                tokenizer=tokenizer,
                 device=self.device,
                 beam_size=self.beam_size
             )
@@ -278,10 +322,7 @@ class Translator:
         Returns:
             List of transcriptions with translated text.
         """
-        # Check if we can translate
-        if not self._tokenizer_loaded:
-            print("[Translator] Tokenizer not available, returning original text")
-            return transcriptions
+        # Model loading handles tokenizer loading per-language
         
         translator = self._load_model(target_lang)
         if translator is None:
@@ -316,16 +357,16 @@ class Translator:
         Returns:
             True if translation is available.
         """
-        if not self._tokenizer_loaded:
-            return False
-        
         if target_lang is None:
             # Check if any models are available
             return len(self.get_available_languages()) > 0
         
-        # Check specific language
+        # Check specific language - need both model and tokenizer
         checkpoint = self.model_dir / target_lang / "best.pt"
-        return checkpoint.exists()
+        tokenizer = self.model_dir / target_lang / "tokenizer.model"
+        # Has per-language tokenizer, or has model with shared fallback
+        has_tokenizer = tokenizer.exists() or self._shared_tokenizer_loaded
+        return checkpoint.exists() and has_tokenizer
     
     def unload_model(self, target_lang: str) -> bool:
         """Unload a specific model to free memory.

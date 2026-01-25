@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Subtitle Generator is a modular, offline subtitle generation and translation system with a REST API backend. It supports **11 Indic languages** with **lazy model loading** for memory efficiency. Version 2.0.0 introduces per-language model files.
+The Subtitle Generator is a modular, offline subtitle generation and translation system with a REST API backend. It supports **11 Indic languages** with **XLarge Transformer models (~385M params)**, **per-language tokenizers**, and **lazy model loading** for memory efficiency.
+
+> ⚠️ **Training Status**: XLarge models are currently being trained. Results pending.
 
 ---
 
@@ -182,91 +184,55 @@ VIDEO FILE (MP4/AVI/MKV)
 
 ```
 models/translation/
-├── nmt_spm.model           # Shared tokenizer (all languages)
-├── nmt_spm.vocab           # Vocabulary file
-├── as/best.pt              # Assamese model (60M params)
-├── bn/best.pt              # Bengali model
-├── gu/best.pt              # Gujarati model
-├── hi/best.pt              # Hindi model
-├── kn/best.pt              # Kannada model
-├── ml/best.pt              # Malayalam model
-├── mr/best.pt              # Marathi model
-├── or/best.pt              # Odia model
-├── pa/best.pt              # Punjabi model
-├── ta/best.pt              # Tamil model
-└── te/best.pt              # Telugu model
+├── hi/                         # Hindi model
+│   ├── tokenizer.model         # Per-language tokenizer (32K BPE)
+│   └── best.pt                 # XLarge model (~385M params)
+├── ta/                         # Tamil model (Dravidian)
+│   ├── tokenizer.model         # Per-language tokenizer (48K Unigram)
+│   └── best.pt
+├── bn/best.pt                  # Bengali
+├── gu/best.pt                  # Gujarati
+├── kn/best.pt                  # Kannada (Dravidian)
+├── ml/best.pt                  # Malayalam (Dravidian)
+├── mr/best.pt                  # Marathi
+├── or/best.pt                  # Odia
+├── pa/best.pt                  # Punjabi
+├── te/best.pt                  # Telugu (Dravidian)
+└── as/best.pt                  # Assamese
 ```
 
 ---
 
 ## NMT Model Architecture
 
-### Transformer (60.52M Parameters)
+### XLarge Transformer (~385M Parameters)
+
+> ⚠️ **Training Status**: Models are currently being trained.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    TRANSFORMER ARCHITECTURE                     │
+│                  XLARGE TRANSFORMER ARCHITECTURE                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  INPUT: "<en> Hello, how are you? </s>"                         │
 │                    │                                            │
 │                    ▼                                            │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │              ENCODER (6 Layers)                         │    │
+│  │              ENCODER (12 Layers)                        │    │
 │  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Token Embedding + Positional Encoding          │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                         ▼                               │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Multi-Head Self-Attention (8 heads)            │    │    │
-│  │  │  + Add & Norm                                   │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                         ▼                               │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Feed-Forward Network (2048 hidden)             │    │    │
-│  │  │  + Add & Norm                                   │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                    (×6 Layers)                          │    │
-│  └─────────────────────────┼───────────────────────────────┘    │
+│  │  Multi-Head Self-Attention (16 heads, d=1024)           │    │
+│  │  Feed-Forward Network (4096 hidden)                     │    │
+│  │                    (×12 Layers)                          │    │
+│  └─────────────────────────┴───────────────────────────────┘    │
 │                            │ Encoder Output                     │
 │                            ▼                                    │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │              DECODER (6 Layers)                         │    │
+│  │              DECODER (12 Layers)                        │    │
 │  │                                                         │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Token Embedding + Positional Encoding          │    │    │
-│  │  │  (Target: "<hi>")                               │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                         ▼                               │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Masked Multi-Head Self-Attention               │    │    │
-│  │  │  + Add & Norm                                   │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                         ▼                               │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Cross-Attention (Encoder-Decoder)              │    │    │
-│  │  │  + Add & Norm                                   │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                         ▼                               │    │
-│  │  ┌─────────────────────────────────────────────────┐    │    │
-│  │  │  Feed-Forward Network (2048 hidden)             │    │    │
-│  │  │  + Add & Norm                                   │    │    │
-│  │  └─────────────────────────────────────────────────┘    │    │
-│  │                         │                               │    │
-│  │                    (×6 Layers)                          │    │
-│  └─────────────────────────┼───────────────────────────────┘    │
-│                            │                                    │
-│                            ▼                                    │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Linear + Softmax (vocab_size=32000)                    │    │
-│  └─────────────────────────────────────────────────────────┘    │
+│  │  Masked Self-Attention + Cross-Attention (16 heads)     │    │
+│  │  Feed-Forward Network (4096 hidden)                     │    │
+│  │                    (×12 Layers)                          │    │
+│  └─────────────────────────┴───────────────────────────────┘    │
 │                            │                                    │
 │                            ▼                                    │
 │  OUTPUT: "हेलो, आप कैसे हैं? </s>"                                  |
@@ -278,14 +244,14 @@ models/translation/
 
 | Parameter | Value |
 |-----------|-------|
-| `d_model` | 512 |
-| `n_heads` | 8 |
-| `n_layers` | 6 (encoder) + 6 (decoder) |
-| `d_ff` | 2048 |
-| `vocab_size` | 32,000 |
+| `d_model` | 1024 |
+| `n_heads` | 16 |
+| `n_layers` | 12 (encoder) + 12 (decoder) |
+| `d_ff` | 4096 |
+| `vocab_size` | 32K (Indo-Aryan) / 48K (Dravidian) |
 | `max_seq_len` | 256 |
 | `dropout` | 0.1 |
-| **Total Params** | **60.52M** |
+| **Total Params** | **~385M** |
 
 ---
 
@@ -381,15 +347,15 @@ app.py (CLI Application)
 
 ## Key Design Decisions
 
-1. **FastAPI over Flask**: Native async support, automatic OpenAPI docs, Pydantic validation
-2. **Background Tasks**: Video processing runs async, non-blocking for API
-3. **Lazy Model Loading**: NMT models load on-demand, reducing startup memory
-4. **Shared Tokenizer**: One tokenizer for all 11 languages
-5. **Per-Language Models**: Each language has own checkpoint for flexibility
-6. **Full Audio Mode**: Process entire audio in one pass, eliminates segmentation overhead
-7. **faster-whisper**: CTranslate2-optimized Whisper for 3-4x speedup
-8. **Batch Translation**: Process all subtitles together for GPU efficiency
-9. **Graceful Degradation**: System works without NMT model (returns original text)
+1. **XLarge Model**: 385M params for maximum translation quality
+2. **Per-Language Tokenizers**: Optimized vocabulary for each language family
+3. **Dravidian Optimization**: 48K vocab + unigram for Kannada, Malayalam, Tamil, Telugu
+4. **FastAPI over Flask**: Native async support, automatic OpenAPI docs
+5. **Background Tasks**: Video processing runs async, non-blocking
+6. **Lazy Model Loading**: Models load on-demand, reducing startup memory
+7. **Per-Language Models**: Each language has own checkpoint for flexibility
+8. **H100 Optimized Training**: Gradient accumulation, mixed precision
+9. **Graceful Degradation**: System works without NMT model
 10. **Auto Device Detection**: Automatically uses CUDA if available
 
 ---
