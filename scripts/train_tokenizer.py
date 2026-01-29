@@ -52,15 +52,41 @@ def create_corpus_for_language(target_lang: str, data_dir: Path, output_path: Pa
     print(f"Creating corpus from {train_file}...")
     count = 0
     
+    print(f"Creating corpus from {train_file}...")
+    count = 0
+    
+    # Auto-detect keys from first line
+    src_key = None
+    tgt_key = None
+    
     with open(output_path, 'w', encoding='utf-8') as out:
         with open(train_file, 'r', encoding='utf-8') as f:
-            for line in f:
+            for i, line in enumerate(f):
                 if count >= max_samples:
                     break
                 try:
                     item = json.loads(line.strip())
-                    src = item.get('src', '').strip()
-                    tgt = item.get('tgt', '').strip()
+                    
+                    # Detect keys on first line
+                    if src_key is None:
+                        keys = list(item.keys())
+                        if 'src' in keys and 'tgt' in keys:
+                            src_key, tgt_key = 'src', 'tgt'
+                        elif 'source' in keys and 'target' in keys:
+                            src_key, tgt_key = 'source', 'target'
+                        elif 'en' in keys and target_lang in keys:
+                            src_key, tgt_key = 'en', target_lang
+                        elif 'english' in keys and get_language_name(target_lang).lower() in keys:
+                            src_key, tgt_key = 'english', get_language_name(target_lang).lower()
+                        else:
+                            # Fallback/Debug
+                            if i == 0:
+                                print(f"⚠️ Warning: Could not auto-detect keys. Found: {keys}")
+                                print(f"   Expected: ['src', 'tgt'] or ['source', 'target'] or ['en', '{target_lang}']")
+                            src_key, tgt_key = 'src', 'tgt' # Default
+                    
+                    src = item.get(src_key, '').strip()
+                    tgt = item.get(tgt_key, '').strip()
                     
                     if src and tgt:
                         out.write(src + '\n')
@@ -69,7 +95,13 @@ def create_corpus_for_language(target_lang: str, data_dir: Path, output_path: Pa
                 except json.JSONDecodeError:
                     continue
     
-    print(f"Created corpus with {count} sentence pairs ({count * 2} sentences)")
+    if count == 0:
+        print(f"❌ Failed to extract any sentences from {train_file}")
+        if src_key:
+            print(f"   Using keys: src='{src_key}', tgt='{tgt_key}'")
+    else:
+        print(f"Created corpus with {count} sentence pairs ({count * 2} sentences)")
+    
     return count > 0
 
 
