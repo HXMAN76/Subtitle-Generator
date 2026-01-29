@@ -24,9 +24,19 @@ def inspect_jsonl(file_path):
                 data = json.loads(line.strip())
                 print(f"Parsed keys: {list(data.keys())}")
                 
-                # Check for expected keys
-                src = data.get('src')
-                tgt = data.get('tgt')
+                # Auto-detect keys (like train script)
+                keys = list(data.keys())
+                src_key, tgt_key = 'src', 'tgt' # default
+                if 'source' in keys and 'target' in keys:
+                    src_key, tgt_key = 'source', 'target'
+                elif 'en' in keys:
+                    # heuristic for en/target_lang
+                    other = [k for k in keys if k != 'en'][0]
+                    src_key, tgt_key = 'en', other
+
+                src = data.get(src_key)
+                tgt = data.get(tgt_key)
+                print(f"Using keys: {src_key}, {tgt_key}")
                 print(f"src: {str(src)[:50]}...")
                 print(f"tgt: {str(tgt)[:50]}...")
                 
