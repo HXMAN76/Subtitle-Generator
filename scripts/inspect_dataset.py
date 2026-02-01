@@ -1,4 +1,9 @@
+"""
+Inspect JSONL dataset files.
 
+Usage:
+    python scripts/inspect_dataset.py <file_path>
+"""
 import json
 import sys
 from pathlib import Path

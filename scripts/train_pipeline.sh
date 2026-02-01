@@ -24,6 +24,20 @@
 
 set -e  # Exit on error
 
+# Ensure we are in the project root
+if [[ ! -f "scripts/train_pipeline.sh" ]]; then
+    echo "Error: Please run this script from the project root."
+    echo "Usage: ./scripts/train_pipeline.sh"
+    exit 1
+fi
+
+# Check for python
+if ! command -v python &> /dev/null; then
+    echo "Error: python could not be found."
+    exit 1
+fi
+
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

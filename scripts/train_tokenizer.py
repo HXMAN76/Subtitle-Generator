@@ -52,8 +52,7 @@ def create_corpus_for_language(target_lang: str, data_dir: Path, output_path: Pa
     print(f"Creating corpus from {train_file}...")
     count = 0
     
-    print(f"Creating corpus from {train_file}...")
-    count = 0
+
     
     # Auto-detect keys from first line
     src_key = None
