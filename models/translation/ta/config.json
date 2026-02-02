@@ -1,6 +1,6 @@
 {
   "model": {
-    "vocab_size": 32000,
+    "vocab_size": 48000,
     "d_model": 1024,
     "n_heads": 16,
     "d_ff": 4096,
