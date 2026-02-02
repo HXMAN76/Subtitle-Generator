@@ -255,7 +255,7 @@ fi
 # ============================================================================
 print_step "4/5" "Train Tokenizer"
 
-TOKENIZER_FILE="${MODEL_DIR}/nmt_spm.model"
+TOKENIZER_FILE="${MODEL_DIR}/tokenizer.model"
 
 if [[ -f "$TOKENIZER_FILE" && -z "$FORCE" ]]; then
     print_skip "Tokenizer already exists: $TOKENIZER_FILE"
