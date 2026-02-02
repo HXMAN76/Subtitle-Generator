@@ -318,6 +318,49 @@ class Trainer:
         return {'train_loss': avg_loss}
     
     @torch.no_grad()
+    def greedy_decode(self, src_ids: torch.Tensor, max_len: int = 50) -> torch.Tensor:
+        """Greedy decoding with KV caching.
+        
+        Args:
+            src_ids: Source token IDs of shape (batch, src_len).
+            max_len: Maximum generation length.
+        
+        Returns:
+            Generated token IDs of shape (batch, gen_len).
+        """
+        batch_size = src_ids.size(0)
+        
+        # Encode source
+        src_mask = (src_ids != self.config.model.pad_id).unsqueeze(1).unsqueeze(2)
+        encoder_output = self.model.encode(src_ids, src_mask)
+        
+        # Initialize decoder
+        tgt = torch.full((batch_size, 1), self.config.model.bos_id, 
+                         dtype=torch.long, device=self.device)
+        caches = None
+        
+        generated_ids = []
+        
+        # Generation loop
+        for _ in range(max_len):
+            logits, caches = self.model.generate_step(
+                tgt=tgt,
+                encoder_output=encoder_output,
+                src=src_ids,
+                caches=caches
+            )
+            
+            # Greedy search (argmax)
+            next_token = logits.argmax(dim=-1, keepdim=True)
+            generated_ids.append(next_token)
+            
+            # Prepare next input
+            tgt = next_token
+        
+        # Concatenate results: (batch, seq_len)
+        return torch.cat(generated_ids, dim=1)
+
+    @torch.no_grad()
     def validate(self) -> float:
         """Run validation.
         
@@ -328,20 +371,58 @@ class Trainer:
         total_loss = 0.0
         num_batches = 0
         
-        for batch in tqdm(self.val_dataloader, desc="Validating", leave=False):
+        # For BLEU calculation
+        references = []
+        hypotheses = []
+        
+        # Limit BLEU calculation to a subset to save time (first 10 batches)
+        bleu_batches = 10
+        
+        for i, batch in enumerate(tqdm(self.val_dataloader, desc="Validating", leave=False)):
             src_ids = batch['src_ids'].to(self.device)
             tgt_ids = batch['tgt_ids'].to(self.device)
             labels = batch['labels'].to(self.device)
             
+            # 1. Compute Loss (Teacher Forcing)
             with autocast(enabled=self.use_amp):
                 logits = self.model(src_ids, tgt_ids)
                 loss = self.criterion(logits, labels)
             
             total_loss += loss.item()
             num_batches += 1
+            
+            # 2. Compute BLEU (Greedy Decoding) on subset
+            if i < bleu_batches and self.tokenizer is not None:
+                # Generate
+                gen_ids = self.greedy_decode(src_ids, max_len=60)
+                
+                # Decode to strings
+                gen_texts = self.tokenizer.decode_batch(gen_ids.tolist())
+                ref_texts = self.tokenizer.decode_batch(labels.tolist())
+                
+                hypotheses.extend(gen_texts)
+                references.extend(ref_texts)
         
         avg_loss = total_loss / num_batches if num_batches > 0 else 0
-        print(f"\nValidation loss: {avg_loss:.4f}")
+        
+        # Calculate BLEU
+        bleu_score = 0.0
+        if hypotheses:
+            try:
+                import sacrebleu
+                # sacrebleu expects list of reference lists [[ref1, ref2], [ref1, ref2]] if multiple refs
+                # Here we have 1 ref per hypothesis
+                bleu = sacrebleu.corpus_bleu(hypotheses, [references])
+                bleu_score = bleu.score
+            except ImportError:
+                print("Warning: sacrebleu not installed. Skipping BLEU calculation.")
+            except Exception as e:
+                print(f"Warning: BLEU calculation failed: {e}")
+        
+        print(f"\nValidation loss: {avg_loss:.4f} | BLEU: {bleu_score:.2f}")
+        
+        # Store BLEU in metrics tracker for the current epoch (hacky way to pass it out)
+        self.last_bleu = bleu_score
         
         return avg_loss
     
@@ -383,7 +464,8 @@ class Trainer:
             print(f"\nEpoch {epoch + 1} completed in {epoch_time:.1f}s")
             print(f"  Train loss: {train_metrics.get('train_loss', 0):.4f}")
             if 'val_loss' in train_metrics:
-                print(f"  Val loss: {train_metrics['val_loss']:.4f}")
+                bleu_msg = f" | BLEU: {getattr(self, 'last_bleu', 0.0):.2f}" if hasattr(self, 'last_bleu') else ""
+                print(f"  Val loss: {train_metrics['val_loss']:.4f}{bleu_msg}")
             
             # Save epoch checkpoint
             self.save_checkpoint(f"epoch_{epoch + 1}.pt")
