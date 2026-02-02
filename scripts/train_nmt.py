@@ -186,12 +186,18 @@ def main():
     if args.train_tokenizer:
         # Train new per-language tokenizer
         print(f"Training new per-language tokenizer for {args.target_lang}...")
+        
+        # Smart selection of tokenizer type
+        model_type = "unigram" if args.target_lang in DRAVIDIAN_LANGUAGES else "bpe"
+        print(f"  Type: {model_type} (optimized for {lang_name})")
+        
         language_tags = ["<en>", f"<{args.target_lang}>"]
         tokenizer = train_nmt_tokenizer(
             corpus_path=args.corpus,
             output_prefix=str(config.model_dir / "tokenizer"),
             vocab_size=config.tokenizer.vocab_size,
-            language_tags=language_tags
+            language_tags=language_tags,
+            model_type=model_type
         )
     elif per_lang_tokenizer_path.exists():
         # Load per-language tokenizer

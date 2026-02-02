@@ -23,10 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.nmt.languages import SUPPORTED_LANGUAGES, get_language_name
-
-# Dravidian languages that benefit from larger vocabulary
-DRAVIDIAN_LANGUAGES = {'kn', 'ml', 'ta', 'te'}
+from src.nmt.languages import SUPPORTED_LANGUAGES, get_language_name, DRAVIDIAN_LANGUAGES
 
 
 def create_corpus_for_language(target_lang: str, data_dir: Path, output_path: Path,

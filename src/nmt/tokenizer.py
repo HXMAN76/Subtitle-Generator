@@ -354,7 +354,8 @@ def train_nmt_tokenizer(
     corpus_path: str = "data/raw/spm_corpus.txt",
     output_prefix: str = "models/translation/nmt_spm",
     vocab_size: int = 32000,
-    language_tags: List[str] = None
+    language_tags: List[str] = None,
+    model_type: str = "bpe"
 ) -> Tokenizer:
     """Convenience function to train the NMT tokenizer.
     
@@ -363,6 +364,7 @@ def train_nmt_tokenizer(
         output_prefix: Output path prefix.
         vocab_size: Vocabulary size.
         language_tags: Language tags to include.
+        model_type: SentencePiece model type ("bpe" or "unigram").
     
     Returns:
         Trained Tokenizer instance.
@@ -374,7 +376,7 @@ def train_nmt_tokenizer(
         corpus_path=corpus_path,
         model_prefix=output_prefix,
         vocab_size=vocab_size,
-        model_type="bpe",
+        model_type=model_type,
         character_coverage=0.9995,  # High coverage for Hindi
         language_tags=language_tags
     )

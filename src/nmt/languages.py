@@ -25,6 +25,9 @@ SUPPORTED_LANGUAGES: Dict[str, str] = {
     "te": "Telugu",
 }
 
+# Dravidian languages (benefit from unigram tokenization)
+DRAVIDIAN_LANGUAGES = {'kn', 'ml', 'ta', 'te'}
+
 # Language code to approximate sentence count in Samanantar
 LANGUAGE_SIZES: Dict[str, str] = {
     "as": "140K",
