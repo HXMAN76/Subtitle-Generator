@@ -42,7 +42,8 @@ from src.nmt.languages import (
     SUPPORTED_LANGUAGES,
     DEFAULT_TARGET_LANGUAGE,
     get_language_name,
-    validate_language
+    validate_language,
+    DRAVIDIAN_LANGUAGES
 )
 
 
