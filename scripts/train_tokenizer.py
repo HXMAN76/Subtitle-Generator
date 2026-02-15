@@ -41,55 +41,95 @@ def create_corpus_for_language(target_lang: str, data_dir: Path, output_path: Pa
     """
     import json
     
-    train_file = data_dir / f"train-en-{target_lang}.jsonl"
+    # Use cleaned training split to avoid data leakage
+    train_file = data_dir / f"train-en-{target_lang}.json"
+    
+    # Fallback to raw file if clean split doesn't exist (warn user)
     if not train_file.exists():
-        print(f"Training data not found: {train_file}")
-        return False
+        raw_file = data_dir / f"train-en-{target_lang}.jsonl"
+        if raw_file.exists():
+            print(f"⚠️ Warning: Cleaned split not found. Using raw file: {raw_file}")
+            print(f"   (This may include test data in tokenizer training)")
+            train_file = raw_file
+        else:
+            print(f"Training data not found: {train_file}")
+            return False
     
     print(f"Creating corpus from {train_file}...")
     count = 0
     
 
     
-    # Auto-detect keys from first line
+    # Auto-detect keys from first item
     src_key = None
     tgt_key = None
     
+    # helper to process items
+    def get_sentence_pair(item):
+        nonlocal src_key, tgt_key
+        # Detect keys on first item
+        if src_key is None:
+            keys = list(item.keys())
+            if 'src' in keys and 'tgt' in keys:
+                src_key, tgt_key = 'src', 'tgt'
+            elif 'source' in keys and 'target' in keys:
+                src_key, tgt_key = 'source', 'target'
+            elif 'en' in keys and target_lang in keys:
+                src_key, tgt_key = 'en', target_lang
+            elif 'english' in keys and get_language_name(target_lang).lower() in keys:
+                src_key, tgt_key = 'english', get_language_name(target_lang).lower()
+            else:
+                # Fallback
+                src_key, tgt_key = 'src', 'tgt'
+        
+        src = item.get(src_key, '').strip()
+        tgt = item.get(tgt_key, '').strip()
+        return src, tgt
+
+    items = []
+    
+    # Check if file is JSON or JSONL based on extension or content
+    is_jsonl = str(train_file).endswith('.jsonl')
+    
+    if not is_jsonl:
+        # Try loading as standard JSON array first
+        try:
+            with open(train_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content.startswith('['):
+                    items = json.loads(content)
+                else:
+                    is_jsonl = True # Fallback to line-by-line
+        except json.JSONDecodeError:
+            is_jsonl = True # Fallback
+
     with open(output_path, 'w', encoding='utf-8') as out:
-        with open(train_file, 'r', encoding='utf-8') as f:
-            for i, line in enumerate(f):
+        if not is_jsonl:
+             # Process loaded JSON array
+             for item in items:
                 if count >= max_samples:
                     break
-                try:
-                    item = json.loads(line.strip())
-                    
-                    # Detect keys on first line
-                    if src_key is None:
-                        keys = list(item.keys())
-                        if 'src' in keys and 'tgt' in keys:
-                            src_key, tgt_key = 'src', 'tgt'
-                        elif 'source' in keys and 'target' in keys:
-                            src_key, tgt_key = 'source', 'target'
-                        elif 'en' in keys and target_lang in keys:
-                            src_key, tgt_key = 'en', target_lang
-                        elif 'english' in keys and get_language_name(target_lang).lower() in keys:
-                            src_key, tgt_key = 'english', get_language_name(target_lang).lower()
-                        else:
-                            # Fallback/Debug
-                            if i == 0:
-                                print(f"⚠️ Warning: Could not auto-detect keys. Found: {keys}")
-                                print(f"   Expected: ['src', 'tgt'] or ['source', 'target'] or ['en', '{target_lang}']")
-                            src_key, tgt_key = 'src', 'tgt' # Default
-                    
-                    src = item.get(src_key, '').strip()
-                    tgt = item.get(tgt_key, '').strip()
-                    
-                    if src and tgt:
-                        out.write(src + '\n')
-                        out.write(tgt + '\n')
-                        count += 1
-                except json.JSONDecodeError:
-                    continue
+                src, tgt = get_sentence_pair(item)
+                if src and tgt:
+                    out.write(src + '\n')
+                    out.write(tgt + '\n')
+                    count += 1
+        else:
+            # Process line-by-line (JSONL)
+            with open(train_file, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if count >= max_samples:
+                        break
+                    if not line.strip(): continue
+                    try:
+                        item = json.loads(line.strip())
+                        src, tgt = get_sentence_pair(item)
+                        if src and tgt:
+                            out.write(src + '\n')
+                            out.write(tgt + '\n')
+                            count += 1
+                    except json.JSONDecodeError:
+                        continue
     
     if count == 0:
         print(f"❌ Failed to extract any sentences from {train_file}")

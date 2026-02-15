@@ -295,6 +295,12 @@ SUBTITLE_FORMAT = "srt"       # srt, vtt
 ### Train Your Own Model
 
 ```bash
+# 1. Train using the automated pipeline (Recommended)
+# Handles data splitting, tokenizer training, and model training
+bash scripts/train_pipeline.sh ta
+
+# OR Manual Steps:
+
 # 1. Train per-language tokenizer (optimized for each language)
 python scripts/train_tokenizer.py --target-lang ta
 

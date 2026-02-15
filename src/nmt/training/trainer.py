@@ -392,34 +392,35 @@ class Trainer:
             num_batches += 1
             
             # 2. Compute BLEU (Greedy Decoding) on subset
-            if i < bleu_batches and self.tokenizer is not None:
-                # Generate
-                gen_ids = self.greedy_decode(src_ids, max_len=60)
-                
-                # Decode to strings
-                gen_texts = self.tokenizer.decode_batch(gen_ids.tolist())
-                ref_texts = self.tokenizer.decode_batch(labels.tolist())
-                
-                hypotheses.extend(gen_texts)
-                references.extend(ref_texts)
+            # Skipped to speed up training as requested
+            # if i < bleu_batches and self.tokenizer is not None:
+            #     # Generate
+            #     gen_ids = self.greedy_decode(src_ids, max_len=60)
+            #     
+            #     # Decode to strings
+            #     gen_texts = self.tokenizer.decode_batch(gen_ids.tolist())
+            #     ref_texts = self.tokenizer.decode_batch(labels.tolist())
+            #     
+            #     hypotheses.extend(gen_texts)
+            #     references.extend(ref_texts)
         
         avg_loss = total_loss / num_batches if num_batches > 0 else 0
         
         # Calculate BLEU
         bleu_score = 0.0
-        if hypotheses:
-            try:
-                import sacrebleu
-                # sacrebleu expects list of reference lists [[ref1, ref2], [ref1, ref2]] if multiple refs
-                # Here we have 1 ref per hypothesis
-                bleu = sacrebleu.corpus_bleu(hypotheses, [references])
-                bleu_score = bleu.score
-            except ImportError:
-                print("Warning: sacrebleu not installed. Skipping BLEU calculation.")
-            except Exception as e:
-                print(f"Warning: BLEU calculation failed: {e}")
+        # if hypotheses:
+        #     try:
+        #         import sacrebleu
+        #         # sacrebleu expects list of reference lists [[ref1, ref2], [ref1, ref2]] if multiple refs
+        #         # Here we have 1 ref per hypothesis
+        #         bleu = sacrebleu.corpus_bleu(hypotheses, [references])
+        #         bleu_score = bleu.score
+        #     except ImportError:
+        #         print("Warning: sacrebleu not installed. Skipping BLEU calculation.")
+        #     except Exception as e:
+        #         print(f"Warning: BLEU calculation failed: {e}")
         
-        print(f"\nValidation loss: {avg_loss:.4f} | BLEU: {bleu_score:.2f}")
+        print(f"\nValidation loss: {avg_loss:.4f}")
         
         # Store BLEU in metrics tracker for the current epoch (hacky way to pass it out)
         self.last_bleu = bleu_score

@@ -173,8 +173,41 @@ def main():
     print(f"Output directory: {config.model_dir}")
     
     # Set data paths (dynamic based on target language if not specified)
-    train_data = args.train_data or f"data/raw/train-en-{args.target_lang}.jsonl"
-    val_data = args.val_data or f"data/raw/validation-en-{args.target_lang}.jsonl"
+    # Priority: 1. CLI arg, 2. Cleaned JSON split, 3. Raw JSONL (fallback with warning)
+    
+    # Training Data
+    if args.train_data:
+        train_data = args.train_data
+    else:
+        # Check for cleaned split first
+        clean_split = f"data/raw/train-en-{args.target_lang}.json"
+        raw_file = f"data/raw/train-en-{args.target_lang}.jsonl"
+        
+        if Path(clean_split).exists():
+            train_data = clean_split
+            print(f"Using cleaned training split: {train_data}")
+        elif Path(raw_file).exists():
+            train_data = raw_file
+            print(f"⚠️ Warning: Using RAW training file: {train_data} (Potential data leakage!)")
+        else:
+            train_data = clean_split # Default to expected path
+            
+    # Validation Data
+    if args.val_data:
+        val_data = args.val_data
+    else:
+        # Check for cleaned split first
+        clean_val = f"data/raw/validation-en-{args.target_lang}.json"
+        raw_val = f"data/raw/validation-en-{args.target_lang}.jsonl"
+        
+        if Path(clean_val).exists():
+            val_data = clean_val
+            print(f"Using validation split: {val_data}")
+        elif Path(raw_val).exists():
+            val_data = raw_val
+            print(f"Using raw validation file: {val_data}")
+        else:
+            val_data = clean_val
     
     # Train or load tokenizer
     print("\n--- Tokenizer ---")

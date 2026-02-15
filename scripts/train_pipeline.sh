@@ -72,7 +72,7 @@ declare -A LANG_NAMES=(
 
 # Language codes in order
 LANG_CODES=("hi" "ta" "te" "bn" "mr" "gu" "kn" "ml" "pa" "or" "as")
-VALID_LANGS="as bn gu hi kn ml mr or pa ta te"w
+VALID_LANGS="as bn gu hi kn ml mr or pa ta te"
 
 # ============================================================================
 # Parse Command Line Arguments
@@ -221,33 +221,28 @@ else
 fi
 
 # ============================================================================
-# Step 2: Create Tokenizer Corpus
+# Step 2: Create Tokenizer Corpus (Merged into Step 4)
 # ============================================================================
-print_step "2/5" "Create Tokenizer Corpus"
+# Skipping explicit corpus creation step as train_tokenizer.py handles it internally
+# using the clean training split.
+print_skip "Step 2 merged into Tokenizer Training to prevent data leakage"
 
-CORPUS_FILE="${DATA_DIR}/spm_corpus_multilang.txt"
 
-if [[ -f "$CORPUS_FILE" && -z "$FORCE" ]]; then
-    print_skip "Corpus already exists: $CORPUS_FILE"
+# ============================================================================
+# Step 3: Create Test/Validation Splits
+# ============================================================================
+print_step "3/5" "Create Data Splits (Train/Val/Test)"
+
+TEST_FILE="${DATA_DIR}/test-en-${LANG}.json"
+VAL_FILE="${DATA_DIR}/validation-en-${LANG}.json"
+CLEAN_TRAIN_FILE="${DATA_DIR}/train-en-${LANG}.json"
+
+if [[ -f "$TEST_FILE" && -f "$VAL_FILE" && -f "$CLEAN_TRAIN_FILE" && -z "$FORCE" ]]; then
+    print_skip "Data splits already exist"
 else
-    echo "Creating tokenizer corpus..."
-    python scripts/download_dataset.py --lang "$LANG" --create-corpus
-    print_done "Corpus created"
-fi
-
-# ============================================================================
-# Step 3: Create Validation Split
-# ============================================================================
-print_step "3/5" "Create Validation Split"
-
-VAL_FILE="${DATA_DIR}/validation-en-${LANG}.jsonl"
-
-if [[ -f "$VAL_FILE" && -z "$FORCE" ]]; then
-    print_skip "Validation file already exists: $VAL_FILE"
-else
-    echo "Creating validation split..."
-    python scripts/download_dataset.py --lang "$LANG" --create-val-split
-    print_done "Validation split created"
+    echo "Creating disjoint Train/Val/Test splits..."
+    python scripts/create_test_splits.py --lang "$LANG" --test-size 1000 --val-size 2000 ${FORCE}
+    print_done "Splits created"
 fi
 
 # ============================================================================
@@ -256,13 +251,20 @@ fi
 print_step "4/5" "Train Tokenizer"
 
 TOKENIZER_FILE="${MODEL_DIR}/tokenizer.model"
+TRAIN_TOKENIZER="" # Don't train inside nmt script, we do it here
 
 if [[ -f "$TOKENIZER_FILE" && -z "$FORCE" ]]; then
     print_skip "Tokenizer already exists: $TOKENIZER_FILE"
-    TRAIN_TOKENIZER=""
 else
-    echo "Tokenizer will be trained during model training..."
-    TRAIN_TOKENIZER="--train-tokenizer"
+    echo "Training tokenizer on CLEAN training split..."
+    # Train tokenizer explicitly (handles its own corpus creation from clean split)
+    python scripts/train_tokenizer.py --target-lang "$LANG"
+    
+    if [[ ! -f "$TOKENIZER_FILE" ]]; then
+        echo -e "${RED}Error: Tokenizer training failed.${NC}"
+        exit 1
+    fi
+    print_done "Tokenizer trained"
 fi
 
 # ============================================================================
